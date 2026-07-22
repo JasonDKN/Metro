@@ -1,0 +1,15 @@
+{
+  "name": "metro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Metro — a personal virtual-assistant checklist app with shortcuts and a Battlepass points system.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "serve": "npx --yes http-server -p 8080 -c-1 ."
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,558 @@
+// ============================================================================
+// Metro's central state store. Single source of truth, persisted to
+// localStorage as one JSON document. Pages import `store` (a singleton) and
+// call methods on it; the store notifies subscribers after every change so
+// each page can re-render.
+//
+// Extensibility notes for future features:
+//   - Bump SCHEMA_VERSION and add a migration step in `migrate()` whenever
+//     AppState's shape changes, so existing users' saves upgrade cleanly.
+//   - New settings/state should be added to types.ts + defaults.ts first,
+//     then read/written here — avoid parallel storage keys.
+// ============================================================================
+
+import type {
+  AppState,
+  Checklist,
+  Difficulty,
+  PointsConfig,
+  ResetSchedule,
+  Rarity,
+  RewardKind,
+  Shortcut,
+  ShortcutKind,
+  Task,
+  Tier,
+  UnlockedReward,
+} from "../types.js";
+import { loadRaw, saveRaw } from "../util/storage.js";
+import { makeId } from "../util/id.js";
+import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
+import { defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
+import { pointsForDifficulty } from "./points.js";
+import { rollReward } from "./rewards.js";
+
+const STORAGE_KEY = "metro:v1:state";
+export const SCHEMA_VERSION = 1;
+
+export interface ToggleTaskResult {
+  task: Task;
+  pointsAwarded: number;
+  checklistFullyCompleted: boolean;
+  tiersGained: number[];
+  rewardsGranted: UnlockedReward[];
+}
+
+function createDefaultState(): AppState {
+  const now = new Date().toISOString();
+  const today = todayISO();
+  const primaryChecklist: Checklist = {
+    id: makeId("checklist"),
+    name: "Daily Checklist",
+    description: "Your highlighted, everyday checklist. Resets automatically each day.",
+    resetSchedule: "daily",
+    isPrimary: true,
+    tasks: [],
+    createdAt: now,
+    lastResetDate: today,
+    history: {},
+  };
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    settings: defaultSettings(),
+    checklists: [primaryChecklist],
+    shortcuts: [],
+    battlepass: {
+      currentMonthKey: currentMonthKey(),
+      seasonPoints: 0,
+      lifetimePoints: 0,
+      currentTier: 0,
+      tiers: DEFAULT_TIERS.map((t) => ({ ...t })),
+      categories: defaultRewardCategories(),
+      unlocked: [],
+      inventory: {},
+      seasonHistory: {},
+    },
+  };
+}
+
+/** Upgrades an older persisted state to the current schema. Each case falls
+ * through intentionally so a save can hop multiple versions in one go. */
+function migrate(state: AppState): AppState {
+  // No migrations needed yet — schemaVersion 1 is the first version.
+  return state;
+}
+
+class Store {
+  private state: AppState;
+  private listeners = new Set<() => void>();
+
+  constructor() {
+    const loaded = loadRaw<AppState>(STORAGE_KEY);
+    this.state = loaded ? migrate(loaded) : createDefaultState();
+    this.processDueRollovers();
+    this.save();
+  }
+
+  getState(): Readonly<AppState> {
+    return this.state;
+  }
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private save(): void {
+    saveRaw(STORAGE_KEY, this.state);
+  }
+
+  private emit(): void {
+    this.save();
+    for (const fn of this.listeners) fn();
+  }
+
+  // ---------------------------------------------------------------------
+  // Rollovers: daily checklist resets + monthly battlepass season change.
+  // Safe to call repeatedly; it's a no-op if nothing is due.
+  // ---------------------------------------------------------------------
+
+  /** Call periodically (e.g. every minute the app is open) in addition to
+   * on load, so a rollover happening while the app is left open is caught
+   * without requiring a page refresh. */
+  checkRollovers(): void {
+    const changed = this.processDueRollovers();
+    if (changed) this.emit();
+  }
+
+  private processDueRollovers(): boolean {
+    let changed = false;
+    const today = todayISO();
+    const monthKey = currentMonthKey();
+
+    for (const checklist of this.state.checklists) {
+      if (checklist.resetSchedule !== "daily") continue;
+      if (!checklist.lastResetDate) {
+        checklist.lastResetDate = today;
+        continue;
+      }
+      if (checklist.lastResetDate === today) continue;
+
+      const totalTasks = checklist.tasks.length;
+      const completedTaskIds = checklist.tasks.filter((t) => t.completed).map((t) => t.id);
+      const missedTaskTexts = checklist.tasks.filter((t) => !t.completed).map((t) => t.text);
+      const pointsEarned = checklist.tasks
+        .filter((t) => t.completed)
+        .reduce((sum, t) => sum + pointsForDifficulty(this.state.settings.pointsConfig, t.difficulty), 0);
+
+      checklist.history[checklist.lastResetDate] = {
+        date: checklist.lastResetDate,
+        totalTasks,
+        completedTaskIds,
+        missedTaskTexts,
+        pointsEarned,
+        fullyCompleted: totalTasks > 0 && completedTaskIds.length === totalTasks,
+      };
+
+      for (const t of checklist.tasks) {
+        t.completed = false;
+        t.completedAt = undefined;
+        t.pointsAwarded = false;
+      }
+      checklist.lastResetDate = today;
+      changed = true;
+    }
+
+    if (this.state.battlepass.currentMonthKey !== monthKey) {
+      const bp = this.state.battlepass;
+      bp.seasonHistory[bp.currentMonthKey] = {
+        pointsEarned: bp.seasonPoints,
+        highestTier: bp.currentTier,
+      };
+      bp.currentMonthKey = monthKey;
+      bp.seasonPoints = 0;
+      bp.currentTier = 0;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  /** Returns yesterday's log entry for a checklist, if any — used to show
+   * "here's what you missed yesterday" on the daily checklist page. */
+  getYesterdayLog(checklistId: string) {
+    const cl = this.state.checklists.find((c) => c.id === checklistId);
+    if (!cl) return null;
+    return cl.history[previousDayISO(todayISO())] ?? null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Settings
+  // ---------------------------------------------------------------------
+
+  renameAssistant(name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.state.settings.assistantName = trimmed;
+    this.emit();
+  }
+
+  setActiveTheme(themeId: string): void {
+    if (!this.state.settings.unlockedThemeIds.includes(themeId)) return;
+    this.state.settings.activeThemeId = themeId;
+    this.emit();
+  }
+
+  setActiveAvatar(avatarId: string): void {
+    if (!this.state.settings.unlockedAvatarIds.includes(avatarId)) return;
+    this.state.settings.activeAvatarId = avatarId;
+    this.emit();
+  }
+
+  setActiveTitle(titleId: string | null): void {
+    if (titleId && !this.state.settings.unlockedTitleIds.includes(titleId)) return;
+    this.state.settings.activeTitleId = titleId;
+    this.emit();
+  }
+
+  updatePointsConfig(config: PointsConfig): void {
+    this.state.settings.pointsConfig = { ...config };
+    this.emit();
+  }
+
+  updateTiers(tiers: Tier[]): void {
+    const sorted = [...tiers].sort((a, b) => a.tier - b.tier);
+    this.state.battlepass.tiers = sorted;
+    this.emit();
+  }
+
+  // ---------------------------------------------------------------------
+  // Checklists & tasks
+  // ---------------------------------------------------------------------
+
+  addChecklist(name: string, resetSchedule: ResetSchedule = "never", description = ""): Checklist {
+    const checklist: Checklist = {
+      id: makeId("checklist"),
+      name: name.trim() || "Untitled Checklist",
+      description: description.trim() || undefined,
+      resetSchedule,
+      isPrimary: false,
+      tasks: [],
+      createdAt: new Date().toISOString(),
+      lastResetDate: resetSchedule === "daily" ? todayISO() : undefined,
+      history: {},
+    };
+    this.state.checklists.push(checklist);
+    this.emit();
+    return checklist;
+  }
+
+  renameChecklist(checklistId: string, name: string, description?: string): void {
+    const cl = this.findChecklist(checklistId);
+    if (!cl) return;
+    if (name.trim()) cl.name = name.trim();
+    if (description !== undefined) cl.description = description.trim() || undefined;
+    this.emit();
+  }
+
+  deleteChecklist(checklistId: string): void {
+    const cl = this.findChecklist(checklistId);
+    if (!cl || cl.isPrimary) return; // the primary daily checklist can't be deleted
+    this.state.checklists = this.state.checklists.filter((c) => c.id !== checklistId);
+    this.emit();
+  }
+
+  addTask(checklistId: string, text: string, difficulty: Difficulty): Task | null {
+    const cl = this.findChecklist(checklistId);
+    if (!cl || !text.trim()) return null;
+    const task: Task = {
+      id: makeId("task"),
+      text: text.trim(),
+      difficulty,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    };
+    cl.tasks.push(task);
+    this.emit();
+    return task;
+  }
+
+  editTask(checklistId: string, taskId: string, updates: { text?: string; difficulty?: Difficulty }): void {
+    const cl = this.findChecklist(checklistId);
+    const task = cl?.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    if (updates.text !== undefined && updates.text.trim()) task.text = updates.text.trim();
+    if (updates.difficulty !== undefined) task.difficulty = updates.difficulty;
+    this.emit();
+  }
+
+  deleteTask(checklistId: string, taskId: string): void {
+    const cl = this.findChecklist(checklistId);
+    if (!cl) return;
+    cl.tasks = cl.tasks.filter((t) => t.id !== taskId);
+    this.emit();
+  }
+
+  /** Toggles a task's completion. Awards points (and rolls battlepass tier
+   * rewards) the first time a task is checked off; unchecking never revokes
+   * points — see Task.pointsAwarded for why. */
+  toggleTask(checklistId: string, taskId: string): ToggleTaskResult | null {
+    const cl = this.findChecklist(checklistId);
+    const task = cl?.tasks.find((t) => t.id === taskId);
+    if (!cl || !task) return null;
+
+    task.completed = !task.completed;
+    let pointsAwarded = 0;
+    const tiersGained: number[] = [];
+    const rewardsGranted: UnlockedReward[] = [];
+
+    if (task.completed) {
+      task.completedAt = new Date().toISOString();
+      if (!task.pointsAwarded) {
+        pointsAwarded = pointsForDifficulty(this.state.settings.pointsConfig, task.difficulty);
+        task.pointsAwarded = true;
+        this.awardPoints(pointsAwarded, tiersGained, rewardsGranted);
+      }
+    } else {
+      task.completedAt = undefined;
+      // Intentionally not revoking points — see pointsAwarded doc comment.
+    }
+
+    const checklistFullyCompleted = cl.tasks.length > 0 && cl.tasks.every((t) => t.completed);
+
+    this.emit();
+    return { task, pointsAwarded, checklistFullyCompleted, tiersGained, rewardsGranted };
+  }
+
+  private awardPoints(amount: number, tiersGainedOut: number[], rewardsGrantedOut: UnlockedReward[]): void {
+    const bp = this.state.battlepass;
+    bp.seasonPoints += amount;
+    bp.lifetimePoints += amount;
+
+    const totalTiers = bp.tiers.length;
+    const highestEligible = [...bp.tiers]
+      .filter((t) => bp.seasonPoints >= t.pointsRequired)
+      .sort((a, b) => a.tier - b.tier);
+
+    for (const tierDef of highestEligible) {
+      if (tierDef.tier <= bp.currentTier) continue;
+      bp.currentTier = tierDef.tier;
+      tiersGainedOut.push(tierDef.tier);
+
+      const alreadyUnlockedUnlockIds = new Set(
+        bp.unlocked.filter((u) => u.kind === "unlock").map((u) => u.rewardId)
+      );
+      const reward = rollReward({
+        tierNumber: tierDef.tier,
+        totalTiers,
+        categories: bp.categories,
+        alreadyUnlockedUnlockIds,
+      });
+      if (!reward) continue;
+
+      const category = bp.categories.find((c) => c.id === reward.categoryId);
+      const unlocked: UnlockedReward = {
+        tier: tierDef.tier,
+        monthKey: bp.currentMonthKey,
+        rewardId: reward.id,
+        categoryId: reward.categoryId,
+        name: reward.name,
+        rarity: reward.rarity,
+        kind: reward.kind,
+        categoryName: category?.name ?? "Reward",
+        unlockedAt: new Date().toISOString(),
+      };
+      bp.unlocked.push(unlocked);
+      rewardsGrantedOut.push(unlocked);
+
+      if (reward.kind === "consumable") {
+        bp.inventory[reward.id] = (bp.inventory[reward.id] ?? 0) + 1;
+      } else {
+        this.applyUnlockEffect(reward.categoryId, reward.id);
+      }
+    }
+  }
+
+  /** Wires a freshly-unlocked cosmetic reward into Settings' unlocked lists
+   * so it's immediately selectable, without auto-switching the user's
+   * current selection. */
+  private applyUnlockEffect(categoryId: string, rewardId: string): void {
+    const s = this.state.settings;
+    if (categoryId === "cat-themes" && !s.unlockedThemeIds.includes(rewardId)) {
+      s.unlockedThemeIds.push(rewardId);
+    } else if (categoryId === "cat-avatars" && !s.unlockedAvatarIds.includes(rewardId)) {
+      s.unlockedAvatarIds.push(rewardId);
+    } else if (categoryId === "cat-titles" && !s.unlockedTitleIds.includes(rewardId)) {
+      s.unlockedTitleIds.push(rewardId);
+    }
+    // Other categories (badges, effects) are purely display-driven from
+    // `battlepass.unlocked` and don't need a settings mirror.
+  }
+
+  // ---------------------------------------------------------------------
+  // Consumables: streak freeze & wildcard
+  // ---------------------------------------------------------------------
+
+  streakFreezeCount(): number {
+    return this.state.battlepass.inventory["item-streak-freeze"] ?? 0;
+  }
+
+  wildcardCount(): number {
+    return this.state.battlepass.inventory["item-wildcard"] ?? 0;
+  }
+
+  /** Spends one Streak Freeze to retroactively protect yesterday's entry on
+   * a daily checklist, even if it wasn't fully completed. */
+  useStreakFreeze(checklistId: string): boolean {
+    if (this.streakFreezeCount() <= 0) return false;
+    const cl = this.findChecklist(checklistId);
+    if (!cl) return false;
+    const yKey = previousDayISO(todayISO());
+    const entry = cl.history[yKey];
+    if (!entry || entry.fullyCompleted || entry.streakProtected) return false;
+    entry.streakProtected = true;
+    this.state.battlepass.inventory["item-streak-freeze"] -= 1;
+    this.emit();
+    return true;
+  }
+
+  /** Spends one Wildcard to swap out a not-yet-completed task's text and
+   * difficulty for something else, without any point/streak penalty. */
+  useWildcard(checklistId: string, taskId: string, newText: string, newDifficulty: Difficulty): boolean {
+    if (this.wildcardCount() <= 0) return false;
+    const cl = this.findChecklist(checklistId);
+    const task = cl?.tasks.find((t) => t.id === taskId);
+    if (!cl || !task || task.completed || !newText.trim()) return false;
+    task.text = newText.trim();
+    task.difficulty = newDifficulty;
+    this.state.battlepass.inventory["item-wildcard"] -= 1;
+    this.emit();
+    return true;
+  }
+
+  // ---------------------------------------------------------------------
+  // Reward categories (user-extensible)
+  // ---------------------------------------------------------------------
+
+  addRewardCategory(name: string, description = ""): void {
+    if (!name.trim()) return;
+    this.state.battlepass.categories.push({
+      id: makeId("cat"),
+      name: name.trim(),
+      description: description.trim() || undefined,
+      builtIn: false,
+      items: [],
+    });
+    this.emit();
+  }
+
+  deleteRewardCategory(categoryId: string): void {
+    const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
+    if (!cat || cat.builtIn) return;
+    this.state.battlepass.categories = this.state.battlepass.categories.filter((c) => c.id !== categoryId);
+    this.emit();
+  }
+
+  addRewardItem(categoryId: string, name: string, rarity: Rarity, kind: RewardKind, description = ""): void {
+    const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
+    if (!cat || !name.trim()) return;
+    cat.items.push({
+      id: makeId("reward"),
+      categoryId,
+      name: name.trim(),
+      description: description.trim() || undefined,
+      rarity,
+      kind,
+    });
+    this.emit();
+  }
+
+  deleteRewardItem(categoryId: string, itemId: string): void {
+    const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
+    if (!cat) return;
+    cat.items = cat.items.filter((i) => i.id !== itemId);
+    this.emit();
+  }
+
+  // ---------------------------------------------------------------------
+  // Shortcuts
+  // ---------------------------------------------------------------------
+
+  addShortcut(label: string, kind: ShortcutKind, target: string, category: string, notes = ""): Shortcut | null {
+    if (!label.trim() || !target.trim()) return null;
+    const shortcut: Shortcut = {
+      id: makeId("shortcut"),
+      label: label.trim(),
+      kind,
+      target: target.trim(),
+      category: category.trim() || "General",
+      notes: notes.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    this.state.shortcuts.push(shortcut);
+    this.emit();
+    return shortcut;
+  }
+
+  editShortcut(id: string, updates: Partial<Pick<Shortcut, "label" | "kind" | "target" | "category" | "notes">>): void {
+    const s = this.state.shortcuts.find((x) => x.id === id);
+    if (!s) return;
+    if (updates.label !== undefined && updates.label.trim()) s.label = updates.label.trim();
+    if (updates.kind !== undefined) s.kind = updates.kind;
+    if (updates.target !== undefined && updates.target.trim()) s.target = updates.target.trim();
+    if (updates.category !== undefined) s.category = updates.category.trim() || "General";
+    if (updates.notes !== undefined) s.notes = updates.notes.trim() || undefined;
+    this.emit();
+  }
+
+  deleteShortcut(id: string): void {
+    this.state.shortcuts = this.state.shortcuts.filter((s) => s.id !== id);
+    this.emit();
+  }
+
+  // ---------------------------------------------------------------------
+  // Backup / restore
+  // ---------------------------------------------------------------------
+
+  exportData(): string {
+    return JSON.stringify(
+      { exportedAt: new Date().toISOString(), schemaVersion: SCHEMA_VERSION, state: this.state },
+      null,
+      2
+    );
+  }
+
+  importData(json: string): { ok: boolean; error?: string } {
+    try {
+      const parsed = JSON.parse(json);
+      const state: AppState = parsed?.state ?? parsed; // allow raw state or wrapped export
+      if (!state || !Array.isArray(state.checklists) || !state.settings || !state.battlepass) {
+        return { ok: false, error: "That file doesn't look like a Metro backup." };
+      }
+      this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
+      this.processDueRollovers();
+      this.emit();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: "Couldn't parse that file as JSON." };
+    }
+  }
+
+  resetAllData(): void {
+    this.state = createDefaultState();
+    this.emit();
+  }
+
+  // ---------------------------------------------------------------------
+
+  private findChecklist(id: string): Checklist | undefined {
+    return this.state.checklists.find((c) => c.id === id);
+  }
+
+  getPrimaryChecklist(): Checklist {
+    return this.state.checklists.find((c) => c.isPrimary) ?? this.state.checklists[0];
+  }
+}
+
+export const store = new Store();
