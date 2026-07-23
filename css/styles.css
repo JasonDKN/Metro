@@ -346,6 +346,8 @@ label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom
 .rarity-rare { color: var(--accent); }
 .rarity-epic { color: var(--accent-2); }
 .rarity-legendary { color: var(--warning); }
+.reward-chip.locked-chip { opacity: 0.55; }
+.reward-chip.locked-chip .reward-icon { filter: grayscale(1); }
 
 /* ---- Shortcuts ------------------------------------------------------------ */
 .shortcut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }

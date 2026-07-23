@@ -76,11 +76,8 @@ export function defaultSettings(): Settings {
   return {
     assistantName: "Metro",
     activeThemeId: DEFAULT_THEME_ID,
-    unlockedThemeIds: [DEFAULT_THEME_ID],
     activeAvatarId: DEFAULT_AVATAR_ID,
-    unlockedAvatarIds: [DEFAULT_AVATAR_ID],
     activeTitleId: null,
-    unlockedTitleIds: [],
     pointsConfig: { ...DEFAULT_POINTS_CONFIG },
   };
 }

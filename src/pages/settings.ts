@@ -1,6 +1,7 @@
 // ============================================================================
-// Settings page — assistant identity, unlocked cosmetics, points/tier
-// tuning, and backup/restore.
+// Settings page — assistant identity, points/tier tuning, and backup/
+// restore. Appearance & Rank (theme/avatar/title selection) lives on the
+// Inventory page now, alongside the rest of your unlocked rewards.
 // ============================================================================
 
 import { store } from "../data/store.js";
@@ -8,30 +9,7 @@ import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import type { Difficulty, Tier } from "../types.js";
-import { BUILT_IN_THEMES, BUILT_IN_AVATARS } from "../data/defaults.js";
 import { showToast } from "../ui/toast.js";
-
-function themeDisplayName(themeId: string): string {
-  const builtIn = BUILT_IN_THEMES.find((t) => t.id === themeId);
-  if (builtIn) return builtIn.name;
-  const state = store.getState();
-  const item = state.battlepass.categories.find((c) => c.id === "cat-themes")?.items.find((i) => i.id === themeId);
-  return item?.name ?? themeId;
-}
-
-function avatarDisplay(avatarId: string): string {
-  const builtIn = BUILT_IN_AVATARS.find((a) => a.id === avatarId);
-  if (builtIn) return `${builtIn.emoji} ${builtIn.name}`;
-  const state = store.getState();
-  const item = state.battlepass.categories.find((c) => c.id === "cat-avatars")?.items.find((i) => i.id === avatarId);
-  return `${item?.description ?? ""} ${item?.name ?? avatarId}`.trim();
-}
-
-function titleDisplay(titleId: string): string {
-  const state = store.getState();
-  const item = state.battlepass.categories.find((c) => c.id === "cat-titles")?.items.find((i) => i.id === titleId);
-  return item?.name ?? titleId;
-}
 
 function renderIdentity(): HTMLElement {
   const state = store.getState();
@@ -43,48 +21,6 @@ function renderIdentity(): HTMLElement {
       el("button", { class: "primary", onclick: () => store.renameAssistant(nameInput.value) }, ["Save Name"]),
     ]),
     el("p", { class: "muted small" }, ["This name is saved on this computer and stays every time you reopen Metro."]),
-  ]);
-}
-
-function renderCosmetics(): HTMLElement {
-  const state = store.getState();
-  const s = state.settings;
-
-  const themeSelect = el(
-    "select",
-    {},
-    s.unlockedThemeIds.map((id) => el("option", { value: id, selected: id === s.activeThemeId }, [themeDisplayName(id)]))
-  ) as HTMLSelectElement;
-
-  const avatarSelect = el(
-    "select",
-    {},
-    s.unlockedAvatarIds.map((id) => el("option", { value: id, selected: id === s.activeAvatarId }, [avatarDisplay(id)]))
-  ) as HTMLSelectElement;
-
-  const titleOptions = [el("option", { value: "", selected: !s.activeTitleId }, ["None"]) as HTMLOptionElement].concat(
-    s.unlockedTitleIds.map((id) => el("option", { value: id, selected: id === s.activeTitleId }, [titleDisplay(id)]) as HTMLOptionElement)
-  );
-  const titleSelect = el("select", {}, titleOptions) as HTMLSelectElement;
-
-  return el("div", { class: "card" }, [
-    el("h2", {}, ["Appearance & Rank"]),
-    el("p", { class: "muted small" }, ["Unlock more of these from the Battlepass by clearing tasks."]),
-    el("div", { class: "inline-form" }, [
-      el("div", { class: "field" }, [
-        el("label", {}, ["Theme"]),
-        themeSelect,
-      ]),
-      el("button", { onclick: () => store.setActiveTheme(themeSelect.value) }, ["Apply"]),
-    ]),
-    el("div", { class: "inline-form", style: "margin-top: 10px;" }, [
-      el("div", { class: "field" }, [el("label", {}, ["Avatar"]), avatarSelect]),
-      el("button", { onclick: () => store.setActiveAvatar(avatarSelect.value) }, ["Apply"]),
-    ]),
-    el("div", { class: "inline-form", style: "margin-top: 10px;" }, [
-      el("div", { class: "field" }, [el("label", {}, ["Title"]), titleSelect]),
-      el("button", { onclick: () => store.setActiveTitle(titleSelect.value || null) }, ["Apply"]),
-    ]),
   ]);
 }
 
@@ -225,7 +161,6 @@ function render(): void {
   const root = qs<HTMLElement>("#page-root");
   clear(root);
   root.appendChild(renderIdentity());
-  root.appendChild(renderCosmetics());
   root.appendChild(renderPointsConfig());
   root.appendChild(renderTierEditor());
   root.appendChild(renderBackup());

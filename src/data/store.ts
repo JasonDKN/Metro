@@ -129,7 +129,7 @@ class Store {
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
-    this.reconcileSettingsUnlocks();
+    this.ensureActiveCosmeticsValid();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
     this.save();
@@ -289,38 +289,44 @@ class Store {
     }
   }
 
-  /** Keeps Settings' selectable unlocked lists (themes/avatars/titles) in
-   * sync with what's actually recorded as earned in battlepass.unlocked,
-   * plus the baseline default theme/avatar every install starts with. This
-   * is the single source of truth going forward — Settings never offers
-   * anything that isn't backed by an actual unlocked-reward record, so it
-   * can't drift out of step with the reward roadmap (e.g. after a reward
-   * category like Badges is removed, or from an earlier version's data).
-   * If your currently-equipped theme/avatar/title gets trimmed by this, it
-   * falls back to the default/none rather than leaving a dangling
-   * selection. Idempotent — safe to run on every load. */
-  private reconcileSettingsUnlocks(): void {
+  /** Whether a specific reward item has actually been earned — the ONE
+   * source of truth for "can this be equipped/is this unlocked", checked
+   * live against battlepass.unlocked rather than a separate cached list.
+   * (A denormalized "unlockedThemeIds"-style cache used to exist here and
+   * repeatedly drifted out of sync with what was actually earned — this
+   * replaces it entirely rather than patching the sync logic again.) */
+  isRewardEarned(categoryId: string, itemId: string): boolean {
+    return this.state.battlepass.unlocked.some(
+      (u) => u.kind === "unlock" && u.categoryId === categoryId && u.rewardId === itemId
+    );
+  }
+
+  /** All item ids earned so far in a given reward category — used by the
+   * Inventory page (and anywhere else) to list what's actually unlocked,
+   * always computed fresh from battlepass.unlocked. */
+  getUnlockedItemIds(categoryId: string): string[] {
+    return this.state.battlepass.unlocked
+      .filter((u) => u.kind === "unlock" && u.categoryId === categoryId)
+      .map((u) => u.rewardId);
+  }
+
+  /** Idempotent safety check: if your currently-equipped theme/avatar/title
+   * ever stops being valid (e.g. its item was deleted from the reward pool
+   * while equipped), fall back to the default/none rather than leaving a
+   * dangling selection. Since eligibility is now always checked live via
+   * isRewardEarned, this can't drift — it only ever needs to catch the
+   * pool-changed-out-from-under-you case. */
+  private ensureActiveCosmeticsValid(): void {
     const s = this.state.settings;
-    const bp = this.state.battlepass;
-
-    const earnedIds = (categoryId: string) =>
-      new Set(bp.unlocked.filter((u) => u.kind === "unlock" && u.categoryId === categoryId).map((u) => u.rewardId));
-
-    const earnedThemes = earnedIds("cat-themes");
-    const earnedAvatars = earnedIds("cat-avatars");
-    const earnedTitles = earnedIds("cat-titles");
-
-    // Rebuilt from scratch (not filtered) so this both drops anything that
-    // isn't actually earned AND adds back anything that IS earned but never
-    // made it into these lists — a plain filter would only ever do the
-    // former, silently leaving earned rewards permanently unselectable.
-    s.unlockedThemeIds = Array.from(new Set([DEFAULT_THEME_ID, ...earnedThemes]));
-    s.unlockedAvatarIds = Array.from(new Set([DEFAULT_AVATAR_ID, ...earnedAvatars]));
-    s.unlockedTitleIds = Array.from(earnedTitles);
-
-    if (!s.unlockedThemeIds.includes(s.activeThemeId)) s.activeThemeId = DEFAULT_THEME_ID;
-    if (!s.unlockedAvatarIds.includes(s.activeAvatarId)) s.activeAvatarId = DEFAULT_AVATAR_ID;
-    if (s.activeTitleId && !s.unlockedTitleIds.includes(s.activeTitleId)) s.activeTitleId = null;
+    if (s.activeThemeId !== DEFAULT_THEME_ID && !this.isRewardEarned("cat-themes", s.activeThemeId)) {
+      s.activeThemeId = DEFAULT_THEME_ID;
+    }
+    if (s.activeAvatarId !== DEFAULT_AVATAR_ID && !this.isRewardEarned("cat-avatars", s.activeAvatarId)) {
+      s.activeAvatarId = DEFAULT_AVATAR_ID;
+    }
+    if (s.activeTitleId && !this.isRewardEarned("cat-titles", s.activeTitleId)) {
+      s.activeTitleId = null;
+    }
   }
 
   /** One-time rename for existing saves: only touches the primary checklist
@@ -460,19 +466,19 @@ class Store {
   }
 
   setActiveTheme(themeId: string): void {
-    if (!this.state.settings.unlockedThemeIds.includes(themeId)) return;
+    if (themeId !== DEFAULT_THEME_ID && !this.isRewardEarned("cat-themes", themeId)) return;
     this.state.settings.activeThemeId = themeId;
     this.emit();
   }
 
   setActiveAvatar(avatarId: string): void {
-    if (!this.state.settings.unlockedAvatarIds.includes(avatarId)) return;
+    if (avatarId !== DEFAULT_AVATAR_ID && !this.isRewardEarned("cat-avatars", avatarId)) return;
     this.state.settings.activeAvatarId = avatarId;
     this.emit();
   }
 
   setActiveTitle(titleId: string | null): void {
-    if (titleId && !this.state.settings.unlockedTitleIds.includes(titleId)) return;
+    if (titleId && !this.isRewardEarned("cat-titles", titleId)) return;
     this.state.settings.activeTitleId = titleId;
     this.emit();
   }
@@ -747,10 +753,11 @@ class Store {
     bp.unlocked.push(unlocked);
     rewardsGrantedOut.push(unlocked);
 
+    // Consumables stack in inventory; 'unlock' kind rewards need nothing
+    // further here — they become equippable/visible purely by virtue of
+    // being in battlepass.unlocked now (see isRewardEarned/getUnlockedItemIds).
     if (item.kind === "consumable") {
       bp.inventory[item.id] = (bp.inventory[item.id] ?? 0) + 1;
-    } else {
-      this.applyUnlockEffect(item.categoryId, item.id);
     }
   }
 
@@ -772,22 +779,6 @@ class Store {
     const bp = this.state.battlepass;
     bp.seasonPoints = Math.max(0, bp.seasonPoints - amount);
     bp.lifetimePoints = Math.max(0, bp.lifetimePoints - amount);
-  }
-
-  /** Wires a freshly-unlocked cosmetic reward into Settings' unlocked lists
-   * so it's immediately selectable, without auto-switching the user's
-   * current selection. */
-  private applyUnlockEffect(categoryId: string, rewardId: string): void {
-    const s = this.state.settings;
-    if (categoryId === "cat-themes" && !s.unlockedThemeIds.includes(rewardId)) {
-      s.unlockedThemeIds.push(rewardId);
-    } else if (categoryId === "cat-avatars" && !s.unlockedAvatarIds.includes(rewardId)) {
-      s.unlockedAvatarIds.push(rewardId);
-    } else if (categoryId === "cat-titles" && !s.unlockedTitleIds.includes(rewardId)) {
-      s.unlockedTitleIds.push(rewardId);
-    }
-    // Other categories (badges, effects) are purely display-driven from
-    // `battlepass.unlocked` and don't need a settings mirror.
   }
 
   // ---------------------------------------------------------------------
@@ -994,7 +985,7 @@ class Store {
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
-      this.reconcileSettingsUnlocks();
+      this.ensureActiveCosmeticsValid();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
       this.emit();

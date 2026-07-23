@@ -209,12 +209,16 @@ export interface Battlepass {
 
 export interface Settings {
   assistantName: string;
+  /** Which theme/avatar/title is currently equipped. Whether something is
+   * *eligible* to be equipped is deliberately NOT tracked here — that used
+   * to be mirrored into separate unlockedThemeIds/unlockedAvatarIds/
+   * unlockedTitleIds arrays, which could silently drift out of sync with
+   * what's actually recorded as earned. Store.isRewardEarned() checks
+   * eligibility live against battlepass.unlocked instead, so there's only
+   * ever one source of truth. */
   activeThemeId: string;
-  unlockedThemeIds: string[];
   activeAvatarId: string;
-  unlockedAvatarIds: string[];
   activeTitleId: string | null;
-  unlockedTitleIds: string[];
   pointsConfig: PointsConfig;
 }
 
