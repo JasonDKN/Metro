@@ -83,7 +83,7 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     // unchecking a task puts it right back where it was among the still-open
     // ones, and dragging still works normally within each group.
     const todaysTasks = activeTasksForChecklist(checklist)
-      .slice()
+      .filter((t) => !t.archived)
       .sort((a, b) => Number(a.completed) - Number(b.completed));
     const total = todaysTasks.length;
     const done = todaysTasks.filter((t) => t.completed).length;
@@ -95,7 +95,25 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     }
     if (checklist.description) container.appendChild(el("p", { class: "muted small" }, [checklist.description]));
     container.appendChild(el("div", { class: "progress-bar", style: "margin: 10px 0 4px;" }, [el("div", { style: `width:${pct}%` })]));
-    container.appendChild(el("div", { class: "muted small" }, [`${done} / ${total} complete${isDaily ? " today" : ""}`]));
+    container.appendChild(
+      el("div", { class: "muted small", style: "display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;" }, [
+        el("span", {}, [`${done} / ${total} complete${isDaily ? " today" : ""}`]),
+        !isDaily && done > 0
+          ? el(
+              "button",
+              {
+                class: "small ghost",
+                onclick: () => {
+                  const count = store.archiveAllCompleted(checklist.id);
+                  if (count > 0) showToast(`Archived ${count} task${count === 1 ? "" : "s"}`, undefined, "success");
+                  paint();
+                },
+              },
+              [`Archive All Completed (${done})`]
+            )
+          : null,
+      ])
+    );
 
     const list = el("div", { class: "task-list", style: "margin-top: 16px;" });
     if (total === 0) {
@@ -148,6 +166,11 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
 
     if (isDaily && checklist.tasks.length > 0) {
       container.appendChild(renderManageAll());
+    }
+
+    if (!isDaily) {
+      const archivedTasks = checklist.tasks.filter((t) => t.archived);
+      if (archivedTasks.length > 0) container.appendChild(renderArchived(archivedTasks));
     }
   }
 
@@ -230,6 +253,23 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
       );
     }
 
+    if (!rowOpts.manageMode && !isDaily && task.completed) {
+      row.appendChild(
+        el(
+          "button",
+          {
+            class: "small ghost",
+            title: "Tuck this completed task into Archived — keeps its points, hides it from the list",
+            onclick: () => {
+              store.archiveTask(checklist.id, task.id);
+              paint();
+            },
+          },
+          ["Archive"]
+        )
+      );
+    }
+
     row.appendChild(
       el("button", { class: "small ghost", onclick: () => openEditForm(task.id, task.text, task.difficulty, task.recurDays) }, ["Edit"])
     );
@@ -248,6 +288,52 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     );
 
     return row;
+  }
+
+  function renderArchived(archivedTasks: Task[]) {
+    return el("details", { class: "manage-recurring" }, [
+      el("summary", {}, [`Archived (${archivedTasks.length})`]),
+      el("p", { class: "muted small", style: "margin: 8px 0 10px;" }, [
+        "Completed tasks tucked out of the way — still counted for points, just off the main list. Unarchive to bring one back.",
+      ]),
+      el(
+        "div",
+        { class: "task-list" },
+        archivedTasks.map((task) => {
+          const row = el("div", { class: "task-item completed" });
+          row.appendChild(el("div", { class: "muted small", style: "width:22px; text-align:center;" }, ["✓"]));
+          row.appendChild(el("div", { class: "task-text" }, [task.text]));
+          row.appendChild(el("div", { class: `difficulty-pill difficulty-${task.difficulty}` }, [DIFFICULTY_LABELS[task.difficulty]]));
+          row.appendChild(
+            el(
+              "button",
+              {
+                class: "small ghost",
+                onclick: () => {
+                  store.unarchiveTask(checklist.id, task.id);
+                  paint();
+                },
+              },
+              ["Unarchive"]
+            )
+          );
+          row.appendChild(
+            el(
+              "button",
+              {
+                class: "small danger ghost",
+                onclick: () => {
+                  store.deleteTask(checklist.id, task.id);
+                  paint();
+                },
+              },
+              ["✕"]
+            )
+          );
+          return row;
+        })
+      ),
+    ]);
   }
 
   function renderManageAll() {

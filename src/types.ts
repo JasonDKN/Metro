@@ -46,6 +46,12 @@ export interface Task {
    * shows every task. Omitted/undefined means "every day", so tasks created
    * before this field existed keep behaving exactly as before. */
   recurDays?: number[];
+  /** True once a completed task on a resetSchedule 'never' checklist has been
+   * tucked into that checklist's "Archived" section — hidden from the main
+   * list and progress count, but not deleted, so it keeps whatever points it
+   * already earned. Not used on 'daily' checklists, which already clear
+   * completed tasks every reset instead of accumulating them. */
+  archived?: boolean;
 }
 
 /** How (and whether) a checklist's tasks auto-uncheck on a schedule.

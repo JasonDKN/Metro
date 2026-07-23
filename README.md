@@ -27,6 +27,16 @@ Drag any task by its ⋮⋮ handle to reorder it within its checklist — drop i
 
 Completed tasks automatically sink to the bottom of the visible list, on every checklist. Unchecking a task puts it right back where it was among the still-open ones. This happens on top of your manual drag order — within the open tasks and within the completed tasks, your ordering is preserved; only the open/completed grouping is automatic.
 
+## Archiving on non-daily checklists
+
+A "never resets" checklist keeps completed tasks checked off indefinitely — deleting one is the only way to remove it, and deleting revokes its points. Archiving is a better fit for tidying up: it tucks a completed task out of the main list (and out of the progress count) without deleting it or touching the points it earned.
+
+- Each completed task on a non-daily checklist gets an **Archive** button next to Edit/✕.
+- **Archive All Completed** archives every currently-completed task on that checklist in one click.
+- Archived tasks live in a collapsible **Archived** section underneath the list — expand it to see them, **Unarchive** to bring one back, or delete it from there if you're done with it for good.
+
+This only applies to "never resets" checklists (including custom ones) — daily checklists (the Daily General Checklist and the six Daily Trials slots) already clear completed tasks on their own each day, so there's nothing to archive.
+
 ## Daily Puzzles
 
 The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did.

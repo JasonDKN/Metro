@@ -470,6 +470,43 @@ class Store {
     this.emit();
   }
 
+  /** Tucks a completed task on a 'never resets' checklist into its Archived
+   * section — hides it from the main list and progress count without
+   * deleting it (points earned stay intact). No-op on daily checklists,
+   * which already clear completed tasks on their own each reset, or on a
+   * task that isn't completed yet. */
+  archiveTask(checklistId: string, taskId: string): void {
+    const cl = this.findChecklist(checklistId);
+    const task = cl?.tasks.find((t) => t.id === taskId);
+    if (!cl || !task || cl.resetSchedule === "daily" || !task.completed) return;
+    task.archived = true;
+    this.emit();
+  }
+
+  unarchiveTask(checklistId: string, taskId: string): void {
+    const cl = this.findChecklist(checklistId);
+    const task = cl?.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    task.archived = false;
+    this.emit();
+  }
+
+  /** Archives every currently-completed, not-yet-archived task on a 'never
+   * resets' checklist in one go. Returns how many were archived. */
+  archiveAllCompleted(checklistId: string): number {
+    const cl = this.findChecklist(checklistId);
+    if (!cl || cl.resetSchedule === "daily") return 0;
+    let count = 0;
+    for (const t of cl.tasks) {
+      if (t.completed && !t.archived) {
+        t.archived = true;
+        count++;
+      }
+    }
+    if (count > 0) this.emit();
+    return count;
+  }
+
   /** Toggles a task's completion. Awards points (and rolls battlepass tier
    * rewards) the first time a task is checked off; unchecking never revokes
    * points — see Task.pointsAwarded for why. */
