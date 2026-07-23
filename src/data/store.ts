@@ -129,6 +129,7 @@ class Store {
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
+    this.backfillMissingTierRewards();
     this.ensureActiveCosmeticsValid();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
@@ -286,6 +287,26 @@ class Store {
     bp.unlocked = bp.unlocked.filter((u) => u.categoryId !== "cat-badges");
     for (const tier of orphanedTiers) {
       this.grantTierReward(tier, []);
+    }
+  }
+
+  /** Safety net: for every tier already reached, make sure its
+   * roadmap-assigned reward actually made it into `bp.unlocked`. Under
+   * normal play this is always already true — awardPoints grants a tier's
+   * reward the moment it's reached — but a handful of historical edge
+   * cases (saves from before the deterministic roadmap existed, the
+   * Badges-removal migration, or the roadmap itself not being fully built
+   * out yet the moment a tier was reached) could leave a reached tier
+   * without a matching grant, which shows up as "I know I earned this but
+   * it's locked." Reuses grantTierReward, which already no-ops if the
+   * item's already owned, so this is idempotent and safe to run on every
+   * load — it can only ever fill in something missing, never duplicate or
+   * change something already granted. */
+  private backfillMissingTierRewards(): void {
+    const bp = this.state.battlepass;
+    for (const tierDef of bp.tiers) {
+      if (tierDef.tier > bp.currentTier) continue;
+      this.grantTierReward(tierDef.tier, []);
     }
   }
 
@@ -985,6 +1006,7 @@ class Store {
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
+      this.backfillMissingTierRewards();
       this.ensureActiveCosmeticsValid();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
