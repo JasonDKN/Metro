@@ -65,8 +65,15 @@ export function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLEl
 
 export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions = {}): HTMLElement {
   const container = el("div", { class: "card" });
+  let draggedTaskId: string | null = null;
   paint();
   return container;
+
+  function clearDragIndicators() {
+    container
+      .querySelectorAll(".drag-over-top, .drag-over-bottom")
+      .forEach((el) => el.classList.remove("drag-over-top", "drag-over-bottom"));
+  }
 
   function paint() {
     clear(container);
@@ -97,6 +104,40 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     }
     container.appendChild(list);
 
+    if (todaysTasks.length > 1) {
+      list.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        const targetRow = (e.target as HTMLElement)?.closest(".task-item") as HTMLElement | null;
+        clearDragIndicators();
+        if (!targetRow || !draggedTaskId || targetRow.dataset.taskId === draggedTaskId) return;
+        const rect = targetRow.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        targetRow.classList.add(before ? "drag-over-top" : "drag-over-bottom");
+      });
+      list.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const targetRow = (e.target as HTMLElement)?.closest(".task-item") as HTMLElement | null;
+        clearDragIndicators();
+        if (!draggedTaskId || !targetRow) return;
+        const targetId = targetRow.dataset.taskId;
+        if (!targetId || targetId === draggedTaskId) return;
+        const rect = targetRow.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+
+        const orderedIds = todaysTasks.map((t) => t.id);
+        const fromIdx = orderedIds.indexOf(draggedTaskId);
+        if (fromIdx !== -1) orderedIds.splice(fromIdx, 1);
+        let toIdx = orderedIds.indexOf(targetId);
+        if (toIdx === -1) toIdx = orderedIds.length;
+        else if (!before) toIdx += 1;
+        orderedIds.splice(toIdx, 0, draggedTaskId);
+
+        store.reorderTasks(checklist.id, orderedIds);
+        paint();
+      });
+    }
+
     container.appendChild(renderAddForm(isDaily));
 
     if (isDaily && checklist.tasks.length > 0) {
@@ -111,6 +152,28 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     if (rowOpts.manageMode) {
       row.appendChild(el("div", { class: "muted small", style: "width:22px; text-align:center;" }, ["•"]));
     } else {
+      // Drag-and-drop reordering — only wired up for the main visible list,
+      // not the "manage all" section (which is sorted by creation date, a
+      // different order than the checklist's own task order).
+      row.dataset.taskId = task.id;
+      row.draggable = true;
+      row.addEventListener("dragstart", (e) => {
+        draggedTaskId = task.id;
+        row.classList.add("dragging");
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", task.id);
+        }
+      });
+      row.addEventListener("dragend", () => {
+        draggedTaskId = null;
+        row.classList.remove("dragging");
+        clearDragIndicators();
+      });
+      row.appendChild(el("span", { class: "drag-handle", title: "Drag to reorder" }, ["⋮⋮"]));
+    }
+
+    if (!rowOpts.manageMode) {
       const checkbox = el(
         "button",
         {

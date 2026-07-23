@@ -426,6 +426,28 @@ class Store {
     this.emit();
   }
 
+  /** Reorders a checklist's tasks to match `orderedVisibleIds` — the new
+   * top-to-bottom order of whichever tasks are currently shown (e.g. today's
+   * active tasks on a daily checklist, drag-and-dropped into a new order).
+   * Tasks NOT in that list (e.g. other days' tasks on a daily checklist,
+   * hidden from today's view) stay anchored in their existing slots; only
+   * the slots that belonged to a visible task get refilled, in the new
+   * order. That keeps a drag-and-drop reorder of "today" from scrambling
+   * tasks scheduled for other days. */
+  reorderTasks(checklistId: string, orderedVisibleIds: string[]): void {
+    const cl = this.findChecklist(checklistId);
+    if (!cl) return;
+    const visibleSet = new Set(orderedVisibleIds);
+    const byId = new Map(cl.tasks.map((t) => [t.id, t]));
+    const queue = [...orderedVisibleIds];
+    cl.tasks = cl.tasks.map((t) => {
+      if (!visibleSet.has(t.id)) return t;
+      const nextId = queue.shift();
+      return (nextId && byId.get(nextId)) || t;
+    });
+    this.emit();
+  }
+
   /** Toggles a task's completion. Awards points (and rolls battlepass tier
    * rewards) the first time a task is checked off; unchecking never revokes
    * points — see Task.pointsAwarded for why. */

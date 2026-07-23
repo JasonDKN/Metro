@@ -234,9 +234,25 @@ label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
 }
 .task-item.completed { opacity: 0.55; }
 .task-item.completed .task-text { text-decoration: line-through; }
+.task-item[draggable="true"] { cursor: grab; }
+.task-item.dragging { opacity: 0.35; }
+.task-item.drag-over-top { border-top-color: var(--accent); }
+.task-item.drag-over-bottom { border-bottom-color: var(--accent); }
+.drag-handle {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  letter-spacing: -1px;
+}
+.drag-handle:active { cursor: grabbing; }
 .task-checkbox {
   width: 22px; height: 22px; flex-shrink: 0;
   border-radius: 50%;

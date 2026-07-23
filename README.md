@@ -21,6 +21,10 @@ Every task on the Daily Checklist (or on any custom checklist you've opted into 
 - The checklist card only shows today's active tasks. To see or edit tasks scheduled for other days (e.g. setting up next Thursday's meeting while it's Monday), open "Manage all recurring tasks" underneath the list.
 - A day with nothing scheduled counts as complete for streak purposes, so days off don't break your streak.
 
+## Reordering tasks
+
+Drag any task by its ⋮⋮ handle to reorder it within its checklist — drop it above or below another task depending on which half of that row you release over. This works on the currently-visible list of any checklist (today's active tasks on a daily checklist, or the full list on a "never resets" checklist). Reordering only rearranges the tasks you can see; tasks scheduled for other days on a daily checklist stay anchored in place. The "Manage all recurring tasks" section isn't reorderable — it's sorted by creation date on purpose, as a separate view for scheduling.
+
 ## How points & the Battlepass work
 
 - Every task you add gets a difficulty (Easy → Extreme). Completing it awards points based on that difficulty (values are editable in Settings).
