@@ -129,8 +129,8 @@ class Store {
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
+    this.reconcileTierGrantsWithRoadmap();
     this.dedupeDuplicateTierGrants();
-    this.backfillMissingTierRewards();
     this.ensureActiveCosmeticsValid();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
@@ -291,32 +291,36 @@ class Store {
     }
   }
 
-  /** Safety net: for every tier already reached, make sure its
-   * roadmap-assigned reward actually made it into `bp.unlocked`. Under
-   * normal play this is always already true — awardPoints grants a tier's
-   * reward the moment it's reached — but a handful of historical edge
-   * cases (saves from before the deterministic roadmap existed, the
-   * Badges-removal migration, or the roadmap itself not being fully built
-   * out yet the moment a tier was reached) could leave a reached tier
-   * without a matching grant, which shows up as "I know I earned this but
-   * it's locked."
+  /** Makes sure every tier you've already reached has ITS OWN
+   * roadmap-assigned reward recorded in `bp.unlocked` — not just *some*
+   * grant, the correct one. Two different situations land here, and this
+   * covers both:
    *
-   * Explicitly skips any tier that already has ANY unlocked entry — never
-   * calls grantTierReward for a tier twice. That check is load-bearing:
-   * grantTierReward's own re-grant guard only covers 'unlock' kind items
-   * (an early version of this method called it unconditionally for every
-   * reached tier on every load, which was harmless for one-time unlocks
-   * but handed out a brand-new consumable — a Streak Freeze or Wildcard —
-   * on every single page refresh, since consumables are meant to legitimately
-   * stack across *different* tiers and so don't dedupe against themselves).
-   * With the per-tier check here, this can only ever fill in a tier with
-   * zero recorded grants — it never touches a tier that already has one. */
-  private backfillMissingTierRewards(): void {
+   *  - a tier with ZERO grants recorded (a historical gap — the original
+   *    "I should already have this but it's locked" report)
+   *  - a tier whose only recorded grant predates the deterministic roadmap
+   *    (e.g. a reward from the old random-roll system) and simply isn't
+   *    what today's roadmap promises for that tier — an earlier version of
+   *    this method only checked "does this tier have ANY grant", so it
+   *    silently left these alone even though they don't match
+   *
+   * In both cases this ADDS the roadmap-correct grant — it never removes
+   * anything itself. If that leaves a tier with two grants (the old
+   * mismatched one plus the new correct one), dedupeDuplicateTierGrants —
+   * which runs right after this — resolves it by keeping the roadmap
+   * match and dropping the rest, correcting inventory for any dropped
+   * consumable. A tier whose existing grant already matches the roadmap is
+   * left completely untouched, so this is idempotent and safe on every
+   * load. */
+  private reconcileTierGrantsWithRoadmap(): void {
     const bp = this.state.battlepass;
-    const tiersWithAGrant = new Set(bp.unlocked.map((u) => u.tier));
+    const roadmapItemIdByTier = new Map(bp.rewardRoadmap.map((r) => [r.tier, r.itemId]));
     for (const tierDef of bp.tiers) {
       if (tierDef.tier > bp.currentTier) continue;
-      if (tiersWithAGrant.has(tierDef.tier)) continue;
+      const roadmapItemId = roadmapItemIdByTier.get(tierDef.tier);
+      if (!roadmapItemId) continue; // no roadmap assignment yet for this tier
+      const alreadyHasIt = bp.unlocked.some((u) => u.tier === tierDef.tier && u.rewardId === roadmapItemId);
+      if (alreadyHasIt) continue;
       this.grantTierReward(tierDef.tier, []);
     }
   }
@@ -325,16 +329,16 @@ class Store {
    * one grant recorded in `bp.unlocked`. Two different situations produce
    * this, and they need opposite tie-breaks:
    *
-   *  1. The re-grant bug described on backfillMissingTierRewards above —
-   *     the same consumable granted repeatedly on every page load. Here
-   *     every duplicate is identical, so which one survives doesn't matter.
+   *  1. A past bug that re-granted the same consumable repeatedly on every
+   *     page load. Here every duplicate is identical, so which one
+   *     survives doesn't matter.
    *  2. A tier whose *original* grant predates the deterministic roadmap
    *     (or predates a since-removed category like the old Badges), sitting
-   *     alongside a *newer, correct* grant that backfillMissingTierRewards
-   *     added once it noticed the roadmap's assigned item for that tier was
+   *     alongside a *newer, correct* grant that reconcileTierGrantsWithRoadmap
+   *     just added because the roadmap's assigned item for that tier was
    *     missing from history. Naively keeping "whichever grant is oldest"
    *     gets this backwards — it throws away the fix and keeps the stale
-   *     reward, which is exactly what happened here.
+   *     reward.
    *
    * So the tie-break is: prefer whichever duplicate's reward matches this
    * tier's CURRENT roadmap assignment — that's the one the deterministic
@@ -1077,8 +1081,8 @@ class Store {
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
+      this.reconcileTierGrantsWithRoadmap();
       this.dedupeDuplicateTierGrants();
-      this.backfillMissingTierRewards();
       this.ensureActiveCosmeticsValid();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
