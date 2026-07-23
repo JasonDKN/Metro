@@ -211,7 +211,7 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 button.small { padding: 5px 10px; font-size: 12px; }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-input[type="text"], input[type="url"], input[type="search"], textarea, select {
+input[type="text"], input[type="url"], input[type="search"], input[type="number"], textarea, select {
   font-family: inherit;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -383,6 +383,14 @@ label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom
 details.manage-recurring { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 details.manage-recurring summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-muted); }
 details.manage-recurring summary:hover { color: var(--text); }
+
+/* ---- Daily Puzzles ---------------------------------------------------- */
+.puzzle-row { flex-direction: column; align-items: stretch; gap: 10px; }
+.check-inline {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-muted); cursor: pointer; white-space: nowrap;
+}
+.check-inline input { margin: 0; accent-color: var(--accent); }
 
 /* ---- Per-checklist controls row (Rename / Delete / Turn Off) -------------- */
 /* Sits above each checklist card with real breathing room below it, instead

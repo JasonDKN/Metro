@@ -25,6 +25,20 @@ Every task on the Daily Checklist (or on any custom checklist you've opted into 
 
 Drag any task by its ⋮⋮ handle to reorder it within its checklist — drop it above or below another task depending on which half of that row you release over. This works on the currently-visible list of any checklist (today's active tasks on a daily checklist, or the full list on a "never resets" checklist). Reordering only rearranges the tasks you can see; tasks scheduled for other days on a daily checklist stay anchored in place. The "Manage all recurring tasks" section isn't reorderable — it's sorted by creation date on purpose, as a separate view for scheduling.
 
+## Daily Puzzles
+
+The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did.
+
+Every game's score maps into the same 10–50 point range, calibrated so a great puzzle day feels roughly like clearing a Medium-to-Extreme task, and even a rough day still earns the floor amount:
+
+- **Maptap.gg** — raw score 500–1000 scales linearly to 10–50 points (500 or below = floor, 1000 = ceiling).
+- **Wordle** — 1 guess = 50 points, 6 guesses = 10 points, linear in between. A Fail is a special case worth 0 points, since it's a loss rather than just a worse solve.
+- **Minute Cryptic** — since "the best possible score" varies puzzle to puzzle, you enter two numbers each day: your guesses-under-par, and that day's best-possible guesses-under-par. Matching the day's best earns the full 50 points; sitting at or below par earns the floor.
+- **Countries of the World Quiz** — enter your finishing time (or check "Didn't finish / 15:00+"). 10 minutes (600s) or faster earns the full 50 points; 15 minutes or a DNF earns the floor.
+- **18 Words** — raw score 0–18 scales linearly to 10–50 points (0 = floor, 18 = ceiling).
+
+Recording a score again for the same day replaces the previous entry and corrects the points it earned (mirrors how deleting a task revokes its points) — handy for fixing a typo. The scoring patterns behind these four games (a linear score/time range, a guess count with a fail case, and a daily-relative "beat the best possible" range) are reusable, so more games can be added later without new scoring code.
+
 ## How points & the Battlepass work
 
 - Every task you add gets a difficulty (Easy → Extreme). Completing it awards points based on that difficulty (values are editable in Settings).

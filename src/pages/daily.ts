@@ -7,6 +7,7 @@ import { store } from "../data/store.js";
 import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { renderChecklistCard } from "../ui/taskList.js";
+import { renderDailyGamesCard } from "../ui/dailyGames.js";
 import { computeStreak, recentHistory } from "../data/streak.js";
 import { formatFriendlyDate, todayISO } from "../util/date.js";
 import { pointsForDifficulty } from "../data/points.js";
@@ -66,6 +67,7 @@ function render(): void {
   );
 
   root.appendChild(renderChecklistCard(primary, { allowWildcard: true, hideHeading: true }));
+  root.appendChild(renderDailyGamesCard());
 
   const history = recentHistory(primary, 7);
   if (history.length > 0) {

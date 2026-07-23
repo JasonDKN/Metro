@@ -205,4 +205,75 @@ export interface AppState {
   checklists: Checklist[];
   shortcuts: Shortcut[];
   battlepass: Battlepass;
+  dailyGames: DailyGamesState;
+}
+
+// ---------------------------------------------------------------------------
+// Daily Puzzles — external daily games (Wordle, etc.) that award Battlepass
+// points scaled to how well you did, so they feel proportionate to clearing
+// a regular task. See src/data/dailyGames.ts for the actual scoring math.
+// ---------------------------------------------------------------------------
+
+/** How a game's raw daily input converts into Battlepass points. Each
+ * variant is a reusable pattern — a new game can be added later by picking
+ * whichever of these fits its scoring style, with no new scoring code. */
+export type DailyGameScoring =
+  | {
+      /** A raw score (or time) that scales linearly between two anchors:
+       * `worst` maps to the floor points, `best` maps to the ceiling points.
+       * `best` can be numerically lower than `worst` (e.g. a timed game where
+       * less time is better) — direction is inferred from which is larger. */
+      method: "linearRange";
+      worst: number;
+      best: number;
+      unit?: "score" | "seconds";
+    }
+  | {
+      /** A guess count where fewer guesses is better, plus a fixed point
+       * value for an outright failure/loss (kept separate since a fail isn't
+       * just "one worse than the worst successful guess"). */
+      method: "guessCount";
+      bestGuesses: number;
+      worstGuesses: number;
+      failPoints: number;
+    }
+  | {
+      /** Guesses-under-par relative to a best-possible value that's entered
+       * fresh each day, for puzzles where "the best you could do" varies
+       * day to day rather than being a fixed personal record. */
+      method: "underParDailyBest";
+    };
+
+export interface DailyGameConfig {
+  id: string;
+  name: string;
+  scoring: DailyGameScoring;
+  /** True for the games Metro ships with by default. */
+  builtIn: boolean;
+  createdAt: string;
+}
+
+/** One day's recorded result for one game. At most one per (gameId, date) —
+ * recording again for the same day replaces the previous entry and corrects
+ * the points it earned, see Store.recordDailyGameResult. */
+export interface DailyGameEntry {
+  gameId: string;
+  date: string; // YYYY-MM-DD
+  /** Raw input(s) — which fields are used depends on the game's scoring
+   * method (see DailyGameScoring). */
+  rawValue?: number; // linearRange
+  guesses?: number | null; // guessCount; null = failed/lost
+  actualUnderPar?: number; // underParDailyBest
+  bestUnderPar?: number; // underParDailyBest
+  pointsAwarded: number;
+  recordedAt: string;
+}
+
+export interface DailyGamesState {
+  /** The point range every game's score maps into — shared across all games
+   * so they feel proportionate to each other and to regular task points. */
+  minPoints: number;
+  maxPoints: number;
+  configs: DailyGameConfig[];
+  entries: DailyGameEntry[];
 }

@@ -14,6 +14,8 @@
 import type {
   AppState,
   Checklist,
+  DailyGameConfig,
+  DailyGameEntry,
   Difficulty,
   PointsConfig,
   ResetSchedule,
@@ -29,6 +31,7 @@ import { loadRaw, saveRaw } from "../util/storage.js";
 import { makeId } from "../util/id.js";
 import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
 import { defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
+import { computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
 import { rollReward } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
@@ -95,6 +98,7 @@ function createDefaultState(): AppState {
       inventory: {},
       seasonHistory: {},
     },
+    dailyGames: defaultDailyGamesState(),
   };
 }
 
@@ -113,6 +117,7 @@ class Store {
     const loaded = loadRaw<AppState>(STORAGE_KEY);
     this.state = loaded ? migrate(loaded) : createDefaultState();
     this.ensureTrialChecklists();
+    this.ensureDailyGames();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
     this.save();
@@ -137,6 +142,23 @@ class Store {
         lastResetDate: todayISO(),
         history: {},
       });
+    }
+  }
+
+  /** Backfills `dailyGames` for existing saves from before this feature
+   * shipped, and — since the built-in game list can grow over time — also
+   * adds any newer built-in game a save doesn't have yet, the same additive
+   * pattern as ensureTrialChecklists. Never touches a game already present
+   * (so a user's own edits to it, once that's supported, would be safe).
+   * Idempotent. */
+  private ensureDailyGames(): void {
+    if (!this.state.dailyGames) {
+      this.state.dailyGames = defaultDailyGamesState();
+      return;
+    }
+    const existingIds = new Set(this.state.dailyGames.configs.map((c) => c.id));
+    for (const config of defaultDailyGamesState().configs) {
+      if (!existingIds.has(config.id)) this.state.dailyGames.configs.push(config);
     }
   }
 
@@ -652,6 +674,58 @@ class Store {
   }
 
   // ---------------------------------------------------------------------
+  // Daily Puzzles
+  // ---------------------------------------------------------------------
+
+  getDailyGames(): DailyGameConfig[] {
+    return this.state.dailyGames.configs;
+  }
+
+  getDailyGameEntry(gameId: string, date: string): DailyGameEntry | undefined {
+    return findDailyGameEntry(this.state.dailyGames, gameId, date);
+  }
+
+  /** Records (or corrects) a daily puzzle's result for the given date and
+   * awards the points it earns, rolling battlepass tiers/rewards the same
+   * way completing a task does. Recording again for a date that's already
+   * logged first revokes that entry's points, so fixing a typo doesn't
+   * double-award — mirrors the delete-revokes-points behavior for tasks. */
+  recordDailyGameResult(
+    gameId: string,
+    date: string,
+    input: { rawValue?: number; guesses?: number | null; actualUnderPar?: number; bestUnderPar?: number }
+  ): { pointsAwarded: number; tiersGained: number[]; rewardsGranted: UnlockedReward[] } | null {
+    const dg = this.state.dailyGames;
+    const config = dg.configs.find((c) => c.id === gameId);
+    if (!config) return null;
+
+    const existing = findDailyGameEntry(dg, gameId, date);
+    if (existing) {
+      this.revokePoints(existing.pointsAwarded);
+      dg.entries = dg.entries.filter((e) => e !== existing);
+    }
+
+    const pointsAwarded = computeDailyGamePoints(config, input, dg);
+    const entry: DailyGameEntry = {
+      gameId,
+      date,
+      rawValue: input.rawValue,
+      guesses: input.guesses,
+      actualUnderPar: input.actualUnderPar,
+      bestUnderPar: input.bestUnderPar,
+      pointsAwarded,
+      recordedAt: new Date().toISOString(),
+    };
+    dg.entries.push(entry);
+
+    const tiersGained: number[] = [];
+    const rewardsGranted: UnlockedReward[] = [];
+    if (pointsAwarded > 0) this.awardPoints(pointsAwarded, tiersGained, rewardsGranted);
+    this.emit();
+    return { pointsAwarded, tiersGained, rewardsGranted };
+  }
+
+  // ---------------------------------------------------------------------
   // Shortcuts
   // ---------------------------------------------------------------------
 
@@ -708,6 +782,7 @@ class Store {
       }
       this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
       this.ensureTrialChecklists();
+      this.ensureDailyGames();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
       this.emit();
