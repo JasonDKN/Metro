@@ -25,6 +25,8 @@ Every task on the Daily Checklist (or on any custom checklist you've opted into 
 
 Drag any task by its ⋮⋮ handle to reorder it within its checklist — drop it above or below another task depending on which half of that row you release over. This works on the currently-visible list of any checklist (today's active tasks on a daily checklist, or the full list on a "never resets" checklist). Reordering only rearranges the tasks you can see; tasks scheduled for other days on a daily checklist stay anchored in place. The "Manage all recurring tasks" section isn't reorderable — it's sorted by creation date on purpose, as a separate view for scheduling.
 
+Completed tasks automatically sink to the bottom of the visible list, on every checklist. Unchecking a task puts it right back where it was among the still-open ones. This happens on top of your manual drag order — within the open tasks and within the completed tasks, your ordering is preserved; only the open/completed grouping is automatic.
+
 ## Daily Puzzles
 
 The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did.

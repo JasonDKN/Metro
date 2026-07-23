@@ -78,7 +78,13 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
   function paint() {
     clear(container);
     const isDaily = checklist.resetSchedule === "daily";
-    const todaysTasks = activeTasksForChecklist(checklist);
+    // Completed tasks automatically sink to the bottom of the visible list —
+    // a stable sort keeps everything else in its existing relative order, so
+    // unchecking a task puts it right back where it was among the still-open
+    // ones, and dragging still works normally within each group.
+    const todaysTasks = activeTasksForChecklist(checklist)
+      .slice()
+      .sort((a, b) => Number(a.completed) - Number(b.completed));
     const total = todaysTasks.length;
     const done = todaysTasks.filter((t) => t.completed).length;
     const pct = total === 0 ? 0 : Math.round((done / total) * 100);
