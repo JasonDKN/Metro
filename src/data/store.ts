@@ -129,6 +129,7 @@ class Store {
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
+    this.dedupeDuplicateTierGrants();
     this.backfillMissingTierRewards();
     this.ensureActiveCosmeticsValid();
     this.renamePrimaryIfDefault();
@@ -298,15 +299,58 @@ class Store {
    * Badges-removal migration, or the roadmap itself not being fully built
    * out yet the moment a tier was reached) could leave a reached tier
    * without a matching grant, which shows up as "I know I earned this but
-   * it's locked." Reuses grantTierReward, which already no-ops if the
-   * item's already owned, so this is idempotent and safe to run on every
-   * load — it can only ever fill in something missing, never duplicate or
-   * change something already granted. */
+   * it's locked."
+   *
+   * Explicitly skips any tier that already has ANY unlocked entry — never
+   * calls grantTierReward for a tier twice. That check is load-bearing:
+   * grantTierReward's own re-grant guard only covers 'unlock' kind items
+   * (an early version of this method called it unconditionally for every
+   * reached tier on every load, which was harmless for one-time unlocks
+   * but handed out a brand-new consumable — a Streak Freeze or Wildcard —
+   * on every single page refresh, since consumables are meant to legitimately
+   * stack across *different* tiers and so don't dedupe against themselves).
+   * With the per-tier check here, this can only ever fill in a tier with
+   * zero recorded grants — it never touches a tier that already has one. */
   private backfillMissingTierRewards(): void {
     const bp = this.state.battlepass;
+    const tiersWithAGrant = new Set(bp.unlocked.map((u) => u.tier));
     for (const tierDef of bp.tiers) {
       if (tierDef.tier > bp.currentTier) continue;
+      if (tiersWithAGrant.has(tierDef.tier)) continue;
       this.grantTierReward(tierDef.tier, []);
+    }
+  }
+
+  /** One-time-but-idempotent repair for the bug described on
+   * backfillMissingTierRewards above: collapses any tier that ended up with
+   * more than one grant recorded (from that bug re-granting a consumable on
+   * every page load) down to the single earliest one, and corrects the
+   * inventory count by however many spurious extra copies were granted.
+   * 'Unlock' kind rewards can't be affected — grantTierReward always
+   * refused to re-grant those regardless of this bug. A no-op for anyone
+   * who never hit the buggy code path (the by-far-common case going
+   * forward). */
+  private dedupeDuplicateTierGrants(): void {
+    const bp = this.state.battlepass;
+    const seenTiers = new Set<number>();
+    const kept: UnlockedReward[] = [];
+    const extraCopiesByItemId = new Map<string, number>();
+
+    for (const u of [...bp.unlocked].sort((a, b) => (a.unlockedAt < b.unlockedAt ? -1 : 1))) {
+      if (seenTiers.has(u.tier)) {
+        if (u.kind === "consumable") {
+          extraCopiesByItemId.set(u.rewardId, (extraCopiesByItemId.get(u.rewardId) ?? 0) + 1);
+        }
+        continue; // drop the duplicate grant
+      }
+      seenTiers.add(u.tier);
+      kept.push(u);
+    }
+
+    if (kept.length === bp.unlocked.length) return; // nothing duplicated — no-op
+    bp.unlocked = kept;
+    for (const [itemId, extraCopies] of extraCopiesByItemId) {
+      bp.inventory[itemId] = Math.max(0, (bp.inventory[itemId] ?? 0) - extraCopies);
     }
   }
 
@@ -1006,6 +1050,7 @@ class Store {
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
+      this.dedupeDuplicateTierGrants();
       this.backfillMissingTierRewards();
       this.ensureActiveCosmeticsValid();
       this.renamePrimaryIfDefault();
