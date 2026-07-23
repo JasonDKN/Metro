@@ -30,7 +30,14 @@ import type {
 import { loadRaw, saveRaw } from "../util/storage.js";
 import { makeId } from "../util/id.js";
 import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
-import { DEFAULT_REWARD_ROADMAP, defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
+import {
+  DEFAULT_AVATAR_ID,
+  DEFAULT_REWARD_ROADMAP,
+  DEFAULT_THEME_ID,
+  defaultRewardCategories,
+  defaultSettings,
+  DEFAULT_TIERS,
+} from "./defaults.js";
 import { computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
 import { nextRoadmapItem } from "./rewards.js";
@@ -121,6 +128,7 @@ class Store {
     this.ensureDailyGames();
     this.ensureRewardRoadmap();
     this.removeBadgesCategory();
+    this.reconcileSettingsUnlocks();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
     this.save();
@@ -241,6 +249,36 @@ class Store {
     for (const tier of orphanedTiers) {
       this.grantTierReward(tier, []);
     }
+  }
+
+  /** Keeps Settings' selectable unlocked lists (themes/avatars/titles) in
+   * sync with what's actually recorded as earned in battlepass.unlocked,
+   * plus the baseline default theme/avatar every install starts with. This
+   * is the single source of truth going forward — Settings never offers
+   * anything that isn't backed by an actual unlocked-reward record, so it
+   * can't drift out of step with the reward roadmap (e.g. after a reward
+   * category like Badges is removed, or from an earlier version's data).
+   * If your currently-equipped theme/avatar/title gets trimmed by this, it
+   * falls back to the default/none rather than leaving a dangling
+   * selection. Idempotent — safe to run on every load. */
+  private reconcileSettingsUnlocks(): void {
+    const s = this.state.settings;
+    const bp = this.state.battlepass;
+
+    const earnedIds = (categoryId: string) =>
+      new Set(bp.unlocked.filter((u) => u.kind === "unlock" && u.categoryId === categoryId).map((u) => u.rewardId));
+
+    const earnedThemes = earnedIds("cat-themes");
+    const earnedAvatars = earnedIds("cat-avatars");
+    const earnedTitles = earnedIds("cat-titles");
+
+    s.unlockedThemeIds = Array.from(new Set([DEFAULT_THEME_ID, ...s.unlockedThemeIds.filter((id) => earnedThemes.has(id))]));
+    s.unlockedAvatarIds = Array.from(new Set([DEFAULT_AVATAR_ID, ...s.unlockedAvatarIds.filter((id) => earnedAvatars.has(id))]));
+    s.unlockedTitleIds = s.unlockedTitleIds.filter((id) => earnedTitles.has(id));
+
+    if (!s.unlockedThemeIds.includes(s.activeThemeId)) s.activeThemeId = DEFAULT_THEME_ID;
+    if (!s.unlockedAvatarIds.includes(s.activeAvatarId)) s.activeAvatarId = DEFAULT_AVATAR_ID;
+    if (s.activeTitleId && !s.unlockedTitleIds.includes(s.activeTitleId)) s.activeTitleId = null;
   }
 
   /** One-time rename for existing saves: only touches the primary checklist
@@ -913,6 +951,7 @@ class Store {
       this.ensureDailyGames();
       this.ensureRewardRoadmap();
       this.removeBadgesCategory();
+      this.reconcileSettingsUnlocks();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
       this.emit();

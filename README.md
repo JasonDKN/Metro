@@ -59,6 +59,7 @@ Recording a score again for the same day replaces the previous entry and correct
 - Reaching a new tier grants one **specific** reward — no randomization. Rewards are assigned to tiers in advance, in strictly increasing rarity as you climb (common early tiers, legendary at the top), so the Tier Track on the Battlepass page always shows exactly what every tier gives, including ones you haven't reached yet. Reward categories: themes, avatars, titles, celebration effects, and consumable Streak Freeze / Wildcard tokens.
 - You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked, and new items become available to fill any tier that was still waiting on one (e.g. if you extend the tier track further than the pool currently covers).
 - The Battlepass page also shows a profile banner (your equipped avatar, name, title, and progress to the next tier) and icons throughout — a color swatch for each theme, an emoji for avatars/titles/effects/consumables — so it's not just plain text and numbers.
+- Settings' theme/avatar/title pickers only ever offer what's actually recorded as earned in the Battlepass — this is reconciled automatically on every load, so it can't drift out of sync with the reward roadmap (e.g. after a category like Badges is removed). If something you had equipped is no longer valid, it falls back to the default rather than leaving a broken selection.
 
 ## Local development
 
