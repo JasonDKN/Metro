@@ -321,30 +321,57 @@ class Store {
     }
   }
 
-  /** One-time-but-idempotent repair for the bug described on
-   * backfillMissingTierRewards above: collapses any tier that ended up with
-   * more than one grant recorded (from that bug re-granting a consumable on
-   * every page load) down to the single earliest one, and corrects the
-   * inventory count by however many spurious extra copies were granted.
-   * 'Unlock' kind rewards can't be affected — grantTierReward always
-   * refused to re-grant those regardless of this bug. A no-op for anyone
-   * who never hit the buggy code path (the by-far-common case going
-   * forward). */
+  /** One-time-but-idempotent repair for a tier that ended up with more than
+   * one grant recorded in `bp.unlocked`. Two different situations produce
+   * this, and they need opposite tie-breaks:
+   *
+   *  1. The re-grant bug described on backfillMissingTierRewards above —
+   *     the same consumable granted repeatedly on every page load. Here
+   *     every duplicate is identical, so which one survives doesn't matter.
+   *  2. A tier whose *original* grant predates the deterministic roadmap
+   *     (or predates a since-removed category like the old Badges), sitting
+   *     alongside a *newer, correct* grant that backfillMissingTierRewards
+   *     added once it noticed the roadmap's assigned item for that tier was
+   *     missing from history. Naively keeping "whichever grant is oldest"
+   *     gets this backwards — it throws away the fix and keeps the stale
+   *     reward, which is exactly what happened here.
+   *
+   * So the tie-break is: prefer whichever duplicate's reward matches this
+   * tier's CURRENT roadmap assignment — that's the one the deterministic
+   * system says you're actually owed — falling back to the earliest grant
+   * only if none of the duplicates match the roadmap (e.g. the roadmap
+   * itself later changed). Dropped consumable duplicates still get
+   * subtracted back out of inventory; dropped 'unlock' kind duplicates need
+   * no further cleanup since they never touched inventory. No-op for any
+   * tier that only ever had one grant (the common case). */
   private dedupeDuplicateTierGrants(): void {
     const bp = this.state.battlepass;
-    const seenTiers = new Set<number>();
+    const roadmapItemIdByTier = new Map(bp.rewardRoadmap.map((r) => [r.tier, r.itemId]));
+    const byTier = new Map<number, UnlockedReward[]>();
+    for (const u of bp.unlocked) {
+      const list = byTier.get(u.tier);
+      if (list) list.push(u);
+      else byTier.set(u.tier, [u]);
+    }
+
     const kept: UnlockedReward[] = [];
     const extraCopiesByItemId = new Map<string, number>();
 
-    for (const u of [...bp.unlocked].sort((a, b) => (a.unlockedAt < b.unlockedAt ? -1 : 1))) {
-      if (seenTiers.has(u.tier)) {
-        if (u.kind === "consumable") {
-          extraCopiesByItemId.set(u.rewardId, (extraCopiesByItemId.get(u.rewardId) ?? 0) + 1);
-        }
-        continue; // drop the duplicate grant
+    for (const entries of byTier.values()) {
+      if (entries.length === 1) {
+        kept.push(entries[0]);
+        continue;
       }
-      seenTiers.add(u.tier);
-      kept.push(u);
+      const sorted = [...entries].sort((a, b) => (a.unlockedAt < b.unlockedAt ? -1 : 1));
+      const roadmapItemId = roadmapItemIdByTier.get(entries[0].tier);
+      const winner = sorted.find((e) => e.rewardId === roadmapItemId) ?? sorted[0];
+      kept.push(winner);
+      for (const e of entries) {
+        if (e === winner) continue;
+        if (e.kind === "consumable") {
+          extraCopiesByItemId.set(e.rewardId, (extraCopiesByItemId.get(e.rewardId) ?? 0) + 1);
+        }
+      }
     }
 
     if (kept.length === bp.unlocked.length) return; // nothing duplicated — no-op
