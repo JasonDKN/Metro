@@ -368,6 +368,17 @@ details.manage-recurring { margin-top: 18px; padding-top: 14px; border-top: 1px 
 details.manage-recurring summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-muted); }
 details.manage-recurring summary:hover { color: var(--text); }
 
+/* ---- Per-checklist controls row (Rename / Delete / Turn Off) -------------- */
+/* Sits above each checklist card with real breathing room below it, instead
+   of overlapping the card underneath. */
+.checklist-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.checklist-controls .controls-right { display: flex; gap: 6px; }
+
 .warn-banner {
   background: color-mix(in srgb, var(--warning) 15%, transparent);
   border: 1px solid var(--warning);

@@ -55,22 +55,24 @@ function render(): void {
 
   for (const checklist of others) {
     const wrapper = el("div", {});
-    const controls = el("div", { style: "display:flex; justify-content:flex-end; gap:8px; margin-bottom: -10px;" }, [
-      el("button", {
-        class: "small ghost",
-        onclick: () => {
-          const name = window.prompt("Rename checklist", checklist.name);
-          if (name && name.trim()) store.renameChecklist(checklist.id, name);
-        },
-      }, ["Rename"]),
-      el("button", {
-        class: "small danger ghost",
-        onclick: () => {
-          if (window.confirm(`Delete "${checklist.name}"? This can't be undone.`)) {
-            store.deleteChecklist(checklist.id);
-          }
-        },
-      }, ["Delete"]),
+    const controls = el("div", { class: "checklist-controls", style: "justify-content: flex-end;" }, [
+      el("div", { class: "controls-right" }, [
+        el("button", {
+          class: "small ghost",
+          onclick: () => {
+            const name = window.prompt("Rename checklist", checklist.name);
+            if (name && name.trim()) store.renameChecklist(checklist.id, name);
+          },
+        }, ["Rename"]),
+        el("button", {
+          class: "small danger ghost",
+          onclick: () => {
+            if (window.confirm(`Delete "${checklist.name}"? This can't be undone.`)) {
+              store.deleteChecklist(checklist.id);
+            }
+          },
+        }, ["Delete"]),
+      ]),
     ]);
     wrapper.appendChild(controls);
     wrapper.appendChild(renderChecklistCard(checklist, { allowWildcard: false }));

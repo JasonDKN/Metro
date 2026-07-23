@@ -43,8 +43,9 @@ export function difficultySelect(selected: Difficulty = 2): HTMLSelectElement {
 }
 
 /** A row of 7 day-of-week checkboxes, defaulting to whatever `selected` is
- * (all 7 days if omitted). Used by both the add-task and edit-task forms. */
-function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLElement; getSelected: () => number[] } {
+ * (all 7 days if omitted). Used by the add-task/edit-task forms, and by the
+ * Daily Trials Checklist page's "add to all six" bulk form. */
+export function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLElement; getSelected: () => number[] } {
   const boxes: HTMLInputElement[] = [];
   const wrap = el(
     "div",

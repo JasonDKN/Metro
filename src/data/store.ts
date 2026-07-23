@@ -163,9 +163,21 @@ class Store {
     saveRaw(STORAGE_KEY, this.state);
   }
 
+  /** Every render() in this app clears and rebuilds its container from
+   * scratch (see src/ui — no framework, no diffing). That briefly shrinks
+   * the document while the old nodes are gone and the new ones haven't been
+   * added back yet, which makes the browser clamp the scroll position — in
+   * practice, editing something far down the page (renaming a checklist,
+   * adding a task) would jump you back to the top. Snapshotting the scroll
+   * position before notifying subscribers and restoring it right after
+   * keeps you exactly where you were. */
   private emit(): void {
     this.save();
+    const hasWindow = typeof window !== "undefined";
+    const scrollX = hasWindow ? window.scrollX : 0;
+    const scrollY = hasWindow ? window.scrollY : 0;
     for (const fn of this.listeners) fn();
+    if (hasWindow) window.scrollTo(scrollX, scrollY);
   }
 
   // ---------------------------------------------------------------------

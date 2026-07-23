@@ -8,16 +8,22 @@
 import { store } from "../data/store.js";
 import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
-import { renderChecklistCard, difficultySelect } from "../ui/taskList.js";
+import { renderChecklistCard, difficultySelect, weekdayPicker } from "../ui/taskList.js";
 import { showToast } from "../ui/toast.js";
 import type { Checklist, Difficulty } from "../types.js";
 
 function renderBulkAddForm(): HTMLElement {
   const textInput = el("input", { type: "text", placeholder: "Add a task to all six DCs at once…" }) as HTMLInputElement;
   const diffSelect = difficultySelect(2);
+  const picker = weekdayPicker();
   const submit = () => {
     if (!textInput.value.trim()) return;
-    const count = store.addTaskToAllTrials(textInput.value, Number(diffSelect.value) as Difficulty);
+    const selectedDays = picker.getSelected();
+    if (selectedDays.length === 0) {
+      showToast("Pick at least one day", "These tasks need to recur on at least one day of the week.");
+      return;
+    }
+    const count = store.addTaskToAllTrials(textInput.value, Number(diffSelect.value) as Difficulty, selectedDays);
     if (count > 0) {
       showToast(`Added to ${count} DC checklist${count === 1 ? "" : "s"}`, textInput.value, "success");
       textInput.value = "";
@@ -34,6 +40,10 @@ function renderBulkAddForm(): HTMLElement {
       el("div", { class: "field", style: "flex: 0 0 170px;" }, [el("label", {}, ["Difficulty"]), diffSelect]),
       el("button", { class: "primary", onclick: submit }, ["Add to All 6"]),
     ]),
+    el("div", { class: "field", style: "margin-top: 10px;" }, [
+      el("label", {}, ["Recurs on (applies to all 6 — defaults to every day)"]),
+      picker.wrap,
+    ]),
   ]);
 }
 
@@ -42,13 +52,13 @@ function renderTrialCard(checklist: Checklist): HTMLElement {
 
   const header = el(
     "div",
-    { style: "display:flex; justify-content:space-between; align-items:center; margin: 18px 0 -6px;" },
+    { class: "checklist-controls", style: "justify-content: space-between; margin-top: 22px;" },
     [
       el("div", { style: "display:flex; align-items:center; gap:10px;" }, [
         el("strong", { style: "font-size:15px;" }, [checklist.name]),
         !enabled ? el("span", { class: "weekday-tag" }, ["Paused"]) : null,
       ]),
-      el("div", { style: "display:flex; gap:6px;" }, [
+      el("div", { class: "controls-right" }, [
         el(
           "button",
           {
