@@ -32,7 +32,7 @@ export interface TaskListOptions {
   hideHeading?: boolean;
 }
 
-function difficultySelect(selected: Difficulty = 2): HTMLSelectElement {
+export function difficultySelect(selected: Difficulty = 2): HTMLSelectElement {
   const select = el("select", {}) as HTMLSelectElement;
   for (let d = 1 as Difficulty; d <= 5; d++) {
     const opt = el("option", { value: String(d) }, [`${DIFFICULTY_LABELS[d]} (${d})`]) as HTMLOptionElement;

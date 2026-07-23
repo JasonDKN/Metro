@@ -34,6 +34,10 @@ export interface Task {
    * Cleared back to false whenever the task's checklist resets (see
    * ResetSchedule 'daily'). */
   pointsAwarded?: boolean;
+  /** The exact number of points granted when pointsAwarded was set — kept so
+   * deleting the task later revokes the exact amount it earned, even if the
+   * points-per-difficulty settings changed in the meantime. */
+  pointsAwardedAmount?: number;
   notes?: string;
   createdAt: string;
   /** Which days of the week (0 = Sunday … 6 = Saturday, matching
@@ -59,6 +63,11 @@ export interface Checklist {
   /** True for the single built-in daily checklist; used to prevent deletion
    * and to decide which list gets top billing on the home page. */
   isPrimary: boolean;
+  /** Defaults to true when omitted. Lets a resetSchedule 'daily' checklist be
+   * paused without deleting it — while disabled it's frozen (no nightly
+   * reset/history logging) until re-enabled. Powers the on/off toggle on the
+   * Daily Trials Checklist page. */
+  enabled?: boolean;
   tasks: Task[];
   createdAt: string;
   /** For resetSchedule 'daily' lists: the last date (YYYY-MM-DD) this

@@ -6,7 +6,8 @@ It's a static site (plain TypeScript compiled to JavaScript, no framework, no ba
 
 ## Pages
 
-- **Daily Checklist** (`index.html`) — the highlighted, top-priority list. Retitles itself each day (e.g. "Thursday Daily Checklist") and shows only the tasks scheduled for today — see "Weekday recurrence" below. Auto-resets every day; shows what you missed yesterday, your streak, and lets you spend a Streak Freeze or Wildcard token.
+- **Daily General Checklist** (`index.html`) — the highlighted, top-priority list. Retitles itself each day (e.g. "Thursday Daily General Checklist") and shows only the tasks scheduled for today — see "Weekday recurrence" below. Auto-resets every day; shows what you missed yesterday, your streak, and lets you spend a Streak Freeze or Wildcard token.
+- **Daily Trials Checklist** (`trials.html`) — six independent, auto-resetting daily checklists ("DC 1"–"DC 6" by default, rename each to whatever your DCs actually are). Turn individual DCs on/off depending on which ones you're targeting that day — a DC that's off is paused and won't reset until you turn it back on. A bulk-add form lets you add one task to all six DCs at once.
 - **Checklists** (`checklists.html`) — create as many additional checklists as you want. They don't auto-reset by default (you can opt a checklist into daily reset too).
 - **Shortcuts** (`shortcuts.html`) — quick links to websites and local files/folders (both open as real clickable links). Programs are listed as copyable reference paths, since browsers can't launch installed desktop applications for security reasons.
 - **Battlepass** (`battlepass.html`) — season progress, tier track, your unlocked reward gallery, and reward-pool management (add new reward categories/items any time without losing existing progress).
@@ -23,7 +24,7 @@ Every task on the Daily Checklist (or on any custom checklist you've opted into 
 ## How points & the Battlepass work
 
 - Every task you add gets a difficulty (Easy → Extreme). Completing it awards points based on that difficulty (values are editable in Settings).
-- Points are purely additive — there's no penalty for missing tasks.
+- Points are purely additive — there's no penalty for missing or unchecking a task. Deleting a task you'd already completed does revoke the points it earned (they'd otherwise be sitting there with nothing behind them), but any battlepass tier/reward you already unlocked along the way stays unlocked.
 - Season points reset to 0 on the 1st of each month; lifetime points never reset.
 - Reaching a new tier randomly rolls a reward from the reward pool (rarer rewards get more likely at higher tiers): themes, avatars, titles, celebration effects, badges, and consumable Streak Freeze / Wildcard tokens.
 - You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked.
@@ -47,7 +48,7 @@ This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) th
 ## Project structure
 
 ```
-index.html, checklists.html, shortcuts.html, battlepass.html, settings.html
+index.html, trials.html, checklists.html, shortcuts.html, battlepass.html, settings.html
 css/styles.css        — design system, including all theme definitions
 src/types.ts          — shared data model
 src/data/             — store (state + persistence), points, rewards, defaults

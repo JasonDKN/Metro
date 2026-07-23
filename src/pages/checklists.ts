@@ -8,6 +8,7 @@ import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { renderChecklistCard } from "../ui/taskList.js";
 import type { ResetSchedule } from "../types.js";
+import { isTrialChecklistId } from "../data/trials.js";
 
 function renderAddChecklistForm(): HTMLElement {
   const nameInput = el("input", { type: "text", placeholder: "e.g. Weekly Errands" }) as HTMLInputElement;
@@ -41,10 +42,14 @@ function render(): void {
   root.appendChild(renderAddChecklistForm());
 
   const state = store.getState();
-  const others = state.checklists.filter((c) => !c.isPrimary);
+  const others = state.checklists.filter((c) => !c.isPrimary && !isTrialChecklistId(c.id));
 
   if (others.length === 0) {
-    root.appendChild(el("div", { class: "empty-state" }, ["No custom checklists yet — create one above."]));
+    root.appendChild(
+      el("div", { class: "empty-state" }, [
+        "No custom checklists yet — create one above. (Looking for the six DC checklists? Those live on the Daily Trials Checklist page.)",
+      ])
+    );
     return;
   }
 

@@ -7,10 +7,11 @@ import { store } from "../data/store.js";
 import { el, clear, qs } from "./dom.js";
 import { defaultRewardCategories } from "../data/defaults.js";
 
-export type PageId = "daily" | "checklists" | "shortcuts" | "battlepass" | "settings";
+export type PageId = "daily" | "trials" | "checklists" | "shortcuts" | "battlepass" | "settings";
 
 const NAV_ITEMS: { id: PageId; label: string; icon: string; href: string }[] = [
-  { id: "daily", label: "Daily Checklist", icon: "✓", href: "index.html" },
+  { id: "daily", label: "Daily General", icon: "✓", href: "index.html" },
+  { id: "trials", label: "Daily Trials", icon: "⚔", href: "trials.html" },
   { id: "checklists", label: "Checklists", icon: "≡", href: "checklists.html" },
   { id: "shortcuts", label: "Shortcuts", icon: "⚡", href: "shortcuts.html" },
   { id: "battlepass", label: "Battlepass", icon: "★", href: "battlepass.html" },

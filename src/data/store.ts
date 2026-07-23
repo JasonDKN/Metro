@@ -32,6 +32,10 @@ import { defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defau
 import { pointsForDifficulty } from "./points.js";
 import { rollReward } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
+import { isTrialChecklistId, TRIAL_SLOT_IDS, trialSlotNumber } from "./trials.js";
+
+const DEFAULT_PRIMARY_NAME = "Daily General Checklist";
+const LEGACY_PRIMARY_NAME = "Daily Checklist";
 
 const STORAGE_KEY = "metro:v1:state";
 export const SCHEMA_VERSION = 1;
@@ -44,12 +48,28 @@ export interface ToggleTaskResult {
   rewardsGranted: UnlockedReward[];
 }
 
+function makeTrialChecklists(): Checklist[] {
+  const now = new Date().toISOString();
+  const today = todayISO();
+  return TRIAL_SLOT_IDS.map((id) => ({
+    id,
+    name: `DC ${trialSlotNumber(id)}`,
+    resetSchedule: "daily" as const,
+    isPrimary: false,
+    enabled: true,
+    tasks: [],
+    createdAt: now,
+    lastResetDate: today,
+    history: {},
+  }));
+}
+
 function createDefaultState(): AppState {
   const now = new Date().toISOString();
   const today = todayISO();
   const primaryChecklist: Checklist = {
     id: makeId("checklist"),
-    name: "Daily Checklist",
+    name: DEFAULT_PRIMARY_NAME,
     description: "Your highlighted, everyday checklist. Resets automatically each day.",
     resetSchedule: "daily",
     isPrimary: true,
@@ -62,7 +82,7 @@ function createDefaultState(): AppState {
   return {
     schemaVersion: SCHEMA_VERSION,
     settings: defaultSettings(),
-    checklists: [primaryChecklist],
+    checklists: [primaryChecklist, ...makeTrialChecklists()],
     shortcuts: [],
     battlepass: {
       currentMonthKey: currentMonthKey(),
@@ -92,8 +112,42 @@ class Store {
   constructor() {
     const loaded = loadRaw<AppState>(STORAGE_KEY);
     this.state = loaded ? migrate(loaded) : createDefaultState();
+    this.ensureTrialChecklists();
+    this.renamePrimaryIfDefault();
     this.processDueRollovers();
     this.save();
+  }
+
+  /** Creates any of the six fixed Daily Trials Checklist slots that don't
+   * already exist yet — covers both brand-new installs and existing saves
+   * from before this feature shipped. Idempotent. */
+  private ensureTrialChecklists(): void {
+    const existingIds = new Set(this.state.checklists.map((c) => c.id));
+    for (const id of TRIAL_SLOT_IDS) {
+      if (existingIds.has(id)) continue;
+      const now = new Date().toISOString();
+      this.state.checklists.push({
+        id,
+        name: `DC ${trialSlotNumber(id)}`,
+        resetSchedule: "daily",
+        isPrimary: false,
+        enabled: true,
+        tasks: [],
+        createdAt: now,
+        lastResetDate: todayISO(),
+        history: {},
+      });
+    }
+  }
+
+  /** One-time rename for existing saves: only touches the primary checklist
+   * if it still has the old default name, so a user's own rename is never
+   * overwritten. */
+  private renamePrimaryIfDefault(): void {
+    const primary = this.state.checklists.find((c) => c.isPrimary);
+    if (primary && primary.name === LEGACY_PRIMARY_NAME) {
+      primary.name = DEFAULT_PRIMARY_NAME;
+    }
   }
 
   getState(): Readonly<AppState> {
@@ -134,6 +188,9 @@ class Store {
 
     for (const checklist of this.state.checklists) {
       if (checklist.resetSchedule !== "daily") continue;
+      // A disabled checklist is paused: it doesn't roll over or log history
+      // while off, and resumes cleanly (from today) once re-enabled.
+      if (checklist.enabled === false) continue;
       if (!checklist.lastResetDate) {
         checklist.lastResetDate = today;
         continue;
@@ -167,6 +224,7 @@ class Store {
         t.completed = false;
         t.completedAt = undefined;
         t.pointsAwarded = false;
+        t.pointsAwardedAmount = undefined;
       }
       checklist.lastResetDate = today;
       changed = true;
@@ -266,9 +324,27 @@ class Store {
 
   deleteChecklist(checklistId: string): void {
     const cl = this.findChecklist(checklistId);
-    if (!cl || cl.isPrimary) return; // the primary daily checklist can't be deleted
+    // The primary daily checklist and the six fixed Trials slots can't be
+    // deleted outright — Trials checklists are toggled off instead.
+    if (!cl || cl.isPrimary || isTrialChecklistId(cl.id)) return;
+    this.revokePoints(this.sumAwardedPoints(cl.tasks));
     this.state.checklists = this.state.checklists.filter((c) => c.id !== checklistId);
     this.emit();
+  }
+
+  /** Enables/disables a resetSchedule 'daily' checklist. While disabled it's
+   * paused: no nightly reset, no history logging — see processDueRollovers.
+   * Used by the Daily Trials Checklist page to target specific DCs per day. */
+  setChecklistEnabled(checklistId: string, enabled: boolean): void {
+    const cl = this.findChecklist(checklistId);
+    if (!cl) return;
+    cl.enabled = enabled;
+    this.emit();
+  }
+
+  /** The six Daily Trials Checklist slots, in a stable order. */
+  getTrialChecklists(): Checklist[] {
+    return TRIAL_SLOT_IDS.map((id) => this.findChecklist(id)).filter((c): c is Checklist => !!c);
   }
 
   addTask(checklistId: string, text: string, difficulty: Difficulty, recurDays?: number[]): Task | null {
@@ -287,6 +363,28 @@ class Store {
     return task;
   }
 
+  /** Adds the same task to all six Daily Trials Checklist slots in one go
+   * (regardless of each slot's on/off state), so a task common to every DC
+   * doesn't need to be typed six times. Returns how many checklists it was
+   * added to. */
+  addTaskToAllTrials(text: string, difficulty: Difficulty, recurDays?: number[]): number {
+    if (!text.trim()) return 0;
+    const trials = this.getTrialChecklists();
+    const days = recurDays && recurDays.length > 0 ? [...recurDays].sort((a, b) => a - b) : [...ALL_WEEKDAYS];
+    for (const cl of trials) {
+      cl.tasks.push({
+        id: makeId("task"),
+        text: text.trim(),
+        difficulty,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        recurDays: days,
+      });
+    }
+    if (trials.length > 0) this.emit();
+    return trials.length;
+  }
+
   editTask(
     checklistId: string,
     taskId: string,
@@ -303,9 +401,15 @@ class Store {
     this.emit();
   }
 
+  /** Deletes a task. If it had already earned points, those points are
+   * revoked (season + lifetime) since the task no longer exists — otherwise
+   * the points would linger forever with nothing behind them. This is
+   * distinct from unchecking a task, which never revokes points. */
   deleteTask(checklistId: string, taskId: string): void {
     const cl = this.findChecklist(checklistId);
     if (!cl) return;
+    const task = cl.tasks.find((t) => t.id === taskId);
+    if (task) this.revokePoints(this.sumAwardedPoints([task]));
     cl.tasks = cl.tasks.filter((t) => t.id !== taskId);
     this.emit();
   }
@@ -328,6 +432,7 @@ class Store {
       if (!task.pointsAwarded) {
         pointsAwarded = pointsForDifficulty(this.state.settings.pointsConfig, task.difficulty);
         task.pointsAwarded = true;
+        task.pointsAwardedAmount = pointsAwarded;
         this.awardPoints(pointsAwarded, tiersGained, rewardsGranted);
       }
     } else {
@@ -389,6 +494,26 @@ class Store {
         this.applyUnlockEffect(reward.categoryId, reward.id);
       }
     }
+  }
+
+  /** Total points across a set of tasks that have already been awarded —
+   * uses each task's exact snapshotted amount when available, falling back
+   * to the current points config for older data that predates the
+   * snapshot. */
+  private sumAwardedPoints(tasks: Task[]): number {
+    return tasks
+      .filter((t) => t.pointsAwarded)
+      .reduce((sum, t) => sum + (t.pointsAwardedAmount ?? pointsForDifficulty(this.state.settings.pointsConfig, t.difficulty)), 0);
+  }
+
+  /** Reverses previously-awarded points (used when the task that earned them
+   * is deleted). Never revokes battlepass tier rewards already unlocked —
+   * those stay earned — and never drops points below zero. */
+  private revokePoints(amount: number): void {
+    if (amount <= 0) return;
+    const bp = this.state.battlepass;
+    bp.seasonPoints = Math.max(0, bp.seasonPoints - amount);
+    bp.lifetimePoints = Math.max(0, bp.lifetimePoints - amount);
   }
 
   /** Wires a freshly-unlocked cosmetic reward into Settings' unlocked lists
@@ -548,6 +673,8 @@ class Store {
         return { ok: false, error: "That file doesn't look like a Metro backup." };
       }
       this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
+      this.ensureTrialChecklists();
+      this.renamePrimaryIfDefault();
       this.processDueRollovers();
       this.emit();
       return { ok: true };
