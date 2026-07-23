@@ -127,6 +127,7 @@ class Store {
     this.ensureTrialChecklists();
     this.ensureDailyGames();
     this.ensureRewardRoadmap();
+    this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
     this.reconcileSettingsUnlocks();
     this.renamePrimaryIfDefault();
@@ -221,6 +222,43 @@ class Store {
     bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
   }
 
+  /** Re-applies the curated DEFAULT_REWARD_ROADMAP to any tier that hasn't
+   * been reached yet, so a deliberate design change (e.g. swapping which
+   * category a tier grants from) takes effect for tiers still ahead of you
+   * — without this, ensureRewardRoadmap's "never change an assigned entry"
+   * stability guarantee would keep the OLD curated pick forever, even after
+   * the curated table itself is edited. Tiers already reached always keep
+   * whatever they actually granted (never revoked/reshuffled), and a
+   * curated pick is skipped if its item is already owned some other way
+   * (an already-reached tier, or a legacy grant) so nothing gets promised
+   * twice. Idempotent. */
+  private syncUpcomingTiersToCuratedRoadmap(): void {
+    const bp = this.state.battlepass;
+    const itemExists = (categoryId: string, itemId: string) =>
+      !!bp.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId);
+    const ownedItemIds = new Set<string>();
+    for (const u of bp.unlocked) {
+      if (u.kind === "unlock") ownedItemIds.add(u.rewardId);
+    }
+    for (const r of bp.rewardRoadmap) {
+      if (r.tier <= bp.currentTier) ownedItemIds.add(r.itemId);
+    }
+
+    for (const curated of DEFAULT_REWARD_ROADMAP) {
+      if (curated.tier <= bp.currentTier) continue; // already reached — never touch
+      if (ownedItemIds.has(curated.itemId)) continue; // already granted elsewhere — don't duplicate
+      if (!itemExists(curated.categoryId, curated.itemId)) continue; // pool changed; leave existing assignment
+
+      const idx = bp.rewardRoadmap.findIndex((r) => r.tier === curated.tier);
+      if (idx === -1) {
+        bp.rewardRoadmap.push({ tier: curated.tier, categoryId: curated.categoryId, itemId: curated.itemId });
+      } else if (bp.rewardRoadmap[idx].itemId !== curated.itemId) {
+        bp.rewardRoadmap[idx] = { tier: curated.tier, categoryId: curated.categoryId, itemId: curated.itemId };
+      }
+    }
+    bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
+  }
+
   /** Drops any roadmap entries for tiers not yet reached that point at a
    * reward which no longer exists (its item/category was deleted from the
    * pool), then refills those tiers from what's left — keeps the
@@ -272,9 +310,13 @@ class Store {
     const earnedAvatars = earnedIds("cat-avatars");
     const earnedTitles = earnedIds("cat-titles");
 
-    s.unlockedThemeIds = Array.from(new Set([DEFAULT_THEME_ID, ...s.unlockedThemeIds.filter((id) => earnedThemes.has(id))]));
-    s.unlockedAvatarIds = Array.from(new Set([DEFAULT_AVATAR_ID, ...s.unlockedAvatarIds.filter((id) => earnedAvatars.has(id))]));
-    s.unlockedTitleIds = s.unlockedTitleIds.filter((id) => earnedTitles.has(id));
+    // Rebuilt from scratch (not filtered) so this both drops anything that
+    // isn't actually earned AND adds back anything that IS earned but never
+    // made it into these lists — a plain filter would only ever do the
+    // former, silently leaving earned rewards permanently unselectable.
+    s.unlockedThemeIds = Array.from(new Set([DEFAULT_THEME_ID, ...earnedThemes]));
+    s.unlockedAvatarIds = Array.from(new Set([DEFAULT_AVATAR_ID, ...earnedAvatars]));
+    s.unlockedTitleIds = Array.from(earnedTitles);
 
     if (!s.unlockedThemeIds.includes(s.activeThemeId)) s.activeThemeId = DEFAULT_THEME_ID;
     if (!s.unlockedAvatarIds.includes(s.activeAvatarId)) s.activeAvatarId = DEFAULT_AVATAR_ID;
@@ -950,6 +992,7 @@ class Store {
       this.ensureTrialChecklists();
       this.ensureDailyGames();
       this.ensureRewardRoadmap();
+      this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
       this.reconcileSettingsUnlocks();
       this.renamePrimaryIfDefault();

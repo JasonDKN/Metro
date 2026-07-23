@@ -49,7 +49,7 @@ export const DEFAULT_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 3, categoryId: "cat-titles", itemId: "title-rookie" },
   { tier: 4, categoryId: "cat-effects", itemId: "effect-confetti" },
   { tier: 5, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
-  { tier: 6, categoryId: "cat-themes", itemId: "theme-midnight" },
+  { tier: 6, categoryId: "cat-effects", itemId: "effect-fireworks" },
   { tier: 7, categoryId: "cat-avatars", itemId: "avatar-fox" },
   { tier: 8, categoryId: "cat-titles", itemId: "title-taskmaster" },
   { tier: 9, categoryId: "cat-wildcard", itemId: "item-wildcard" },
