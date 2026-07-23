@@ -36,6 +36,12 @@ export interface Task {
   pointsAwarded?: boolean;
   notes?: string;
   createdAt: string;
+  /** Which days of the week (0 = Sunday … 6 = Saturday, matching
+   * Date.getDay()) this task recurs on. Only meaningful for checklists with
+   * resetSchedule 'daily' — a 'never' checklist ignores this and always
+   * shows every task. Omitted/undefined means "every day", so tasks created
+   * before this field existed keep behaving exactly as before. */
+  recurDays?: number[];
 }
 
 /** How (and whether) a checklist's tasks auto-uncheck on a schedule.

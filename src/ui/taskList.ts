@@ -2,18 +2,34 @@
 // Reusable checklist card: progress bar, task rows (toggle/edit/delete), and
 // an add-task form. Shared between the Daily Checklist page and the custom
 // Checklists page so behavior stays identical everywhere a checklist shows.
+//
+// Checklists with resetSchedule 'daily' additionally support per-task
+// weekday recurrence: a task can be scheduled for any subset of the week
+// (e.g. "Mon–Fri" for a recurring work task, or just "Thu" for a weekly
+// meeting). The card automatically shows only today's active tasks, with a
+// collapsible "manage all" section underneath for scheduling/editing tasks
+// that aren't active today. See src/data/schedule.ts for the filtering
+// logic this is built on.
 // ============================================================================
 
-import type { Checklist, Difficulty } from "../types.js";
+import type { Checklist, Difficulty, Task } from "../types.js";
 import { store } from "../data/store.js";
 import { el, clear } from "./dom.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import { announceRewards, celebrate, showToast } from "./toast.js";
+import {
+  ALL_WEEKDAYS,
+  activeTasksForChecklist,
+  describeRecurDays,
+  weekdayLabel,
+  WEEKDAY_SHORT,
+} from "../data/schedule.js";
 
 export interface TaskListOptions {
   allowWildcard?: boolean;
-  allowRename?: boolean;
-  allowDelete?: boolean;
+  /** Skip rendering the card's own name/heading — use when the page already
+   * shows its own title above the card (e.g. the Daily Checklist page). */
+  hideHeading?: boolean;
 }
 
 function difficultySelect(selected: Difficulty = 2): HTMLSelectElement {
@@ -26,6 +42,26 @@ function difficultySelect(selected: Difficulty = 2): HTMLSelectElement {
   return select;
 }
 
+/** A row of 7 day-of-week checkboxes, defaulting to whatever `selected` is
+ * (all 7 days if omitted). Used by both the add-task and edit-task forms. */
+function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLElement; getSelected: () => number[] } {
+  const boxes: HTMLInputElement[] = [];
+  const wrap = el(
+    "div",
+    { class: "weekday-picker" },
+    WEEKDAY_SHORT.map((label, i) => {
+      const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
+      cb.checked = selected.includes(i);
+      boxes.push(cb);
+      return el("label", { class: "weekday-check" }, [cb, label]);
+    })
+  );
+  return {
+    wrap,
+    getSelected: () => boxes.map((b, i) => (b.checked ? i : -1)).filter((i) => i >= 0),
+  };
+}
+
 export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions = {}): HTMLElement {
   const container = el("div", { class: "card" });
   paint();
@@ -33,93 +69,164 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
 
   function paint() {
     clear(container);
-    const total = checklist.tasks.length;
-    const done = checklist.tasks.filter((t) => t.completed).length;
+    const isDaily = checklist.resetSchedule === "daily";
+    const todaysTasks = activeTasksForChecklist(checklist);
+    const total = todaysTasks.length;
+    const done = todaysTasks.filter((t) => t.completed).length;
     const pct = total === 0 ? 0 : Math.round((done / total) * 100);
 
-    const header = el("div", {}, [
-      el("h2", {}, [checklist.name]),
-      checklist.description ? el("p", { class: "muted small" }, [checklist.description]) : null,
-      el("div", { class: "progress-bar", style: "margin: 10px 0 4px;" }, [el("div", { style: `width:${pct}%` })]),
-      el("div", { class: "muted small" }, [`${done} / ${total} complete`]),
-    ]);
-    container.appendChild(header);
+    if (!opts.hideHeading) {
+      const heading = isDaily ? `${weekdayLabel(new Date().getDay())} ${checklist.name}` : checklist.name;
+      container.appendChild(el("h2", {}, [heading]));
+    }
+    if (checklist.description) container.appendChild(el("p", { class: "muted small" }, [checklist.description]));
+    container.appendChild(el("div", { class: "progress-bar", style: "margin: 10px 0 4px;" }, [el("div", { style: `width:${pct}%` })]));
+    container.appendChild(el("div", { class: "muted small" }, [`${done} / ${total} complete${isDaily ? " today" : ""}`]));
 
     const list = el("div", { class: "task-list", style: "margin-top: 16px;" });
     if (total === 0) {
-      list.appendChild(el("div", { class: "empty-state" }, ["No tasks yet — add your first one below."]));
+      list.appendChild(
+        el("div", { class: "empty-state" }, [
+          isDaily ? "Nothing scheduled for today — add a task below, or check “Manage all recurring tasks”." : "No tasks yet — add your first one below.",
+        ])
+      );
     }
-    for (const task of checklist.tasks) {
-      list.appendChild(renderTaskRow(task));
+    for (const task of todaysTasks) {
+      list.appendChild(renderTaskRow(task, {}));
     }
     container.appendChild(list);
 
-    container.appendChild(renderAddForm());
+    container.appendChild(renderAddForm(isDaily));
+
+    if (isDaily && checklist.tasks.length > 0) {
+      container.appendChild(renderManageAll());
+    }
   }
 
-  function renderTaskRow(task: Checklist["tasks"][number]) {
+  function renderTaskRow(task: Task, rowOpts: { manageMode?: boolean }) {
+    const isDaily = checklist.resetSchedule === "daily";
     const row = el("div", { class: `task-item${task.completed ? " completed" : ""}` });
 
-    const checkbox = el("button", {
-      class: "task-checkbox",
-      "aria-label": "toggle task",
-      onclick: () => {
-        const result = store.toggleTask(checklist.id, task.id);
-        if (!result) return;
-        if (result.pointsAwarded > 0) {
-          showToast(`+${result.pointsAwarded} pts`, task.text, "success");
-        }
-        if (result.rewardsGranted.length > 0) {
-          announceRewards(result.rewardsGranted);
-        }
-        if (result.checklistFullyCompleted) {
-          celebrate();
-          showToast("Checklist complete! 🎉", `You cleared "${checklist.name}".`, "success");
-        }
-        paint();
-      },
-    }, [task.completed ? "✓" : ""]);
-    row.appendChild(checkbox);
+    if (rowOpts.manageMode) {
+      row.appendChild(el("div", { class: "muted small", style: "width:22px; text-align:center;" }, ["•"]));
+    } else {
+      const checkbox = el(
+        "button",
+        {
+          class: "task-checkbox",
+          "aria-label": "toggle task",
+          onclick: () => {
+            const result = store.toggleTask(checklist.id, task.id);
+            if (!result) return;
+            if (result.pointsAwarded > 0) {
+              showToast(`+${result.pointsAwarded} pts`, task.text, "success");
+            }
+            if (result.rewardsGranted.length > 0) {
+              announceRewards(result.rewardsGranted);
+            }
+            if (result.checklistFullyCompleted) {
+              celebrate();
+              showToast("Checklist complete! 🎉", `You cleared "${checklist.name}".`, "success");
+            }
+            paint();
+          },
+        },
+        [task.completed ? "✓" : ""]
+      );
+      row.appendChild(checkbox);
+    }
 
     row.appendChild(el("div", { class: "task-text" }, [task.text]));
     row.appendChild(el("div", { class: `difficulty-pill difficulty-${task.difficulty}` }, [DIFFICULTY_LABELS[task.difficulty]]));
 
-    if (opts.allowWildcard && !task.completed && store.wildcardCount() > 0) {
+    if (isDaily) {
+      const recurText = describeRecurDays(task);
+      if (rowOpts.manageMode || recurText) {
+        row.appendChild(el("div", { class: "weekday-tag" }, [recurText ?? "Every day"]));
+      }
+    }
+
+    if (!rowOpts.manageMode && opts.allowWildcard && !task.completed && store.wildcardCount() > 0) {
       row.appendChild(
-        el("button", {
-          class: "small",
-          title: "Use a Wildcard to swap this task",
-          onclick: () => openWildcardForm(task.id, task.text, task.difficulty),
-        }, ["🃏 Swap"])
+        el(
+          "button",
+          {
+            class: "small",
+            title: "Use a Wildcard to swap this task",
+            onclick: () => openWildcardForm(task.id, task.text, task.difficulty),
+          },
+          ["🃏 Swap"]
+        )
       );
     }
 
     row.appendChild(
-      el("button", { class: "small ghost", onclick: () => openEditForm(task.id, task.text, task.difficulty) }, ["Edit"])
+      el("button", { class: "small ghost", onclick: () => openEditForm(task.id, task.text, task.difficulty, task.recurDays) }, ["Edit"])
     );
     row.appendChild(
-      el("button", { class: "small danger ghost", onclick: () => { store.deleteTask(checklist.id, task.id); paint(); } }, ["✕"])
+      el(
+        "button",
+        {
+          class: "small danger ghost",
+          onclick: () => {
+            store.deleteTask(checklist.id, task.id);
+            paint();
+          },
+        },
+        ["✕"]
+      )
     );
 
     return row;
   }
 
-  function openEditForm(taskId: string, text: string, difficulty: Difficulty) {
+  function renderManageAll() {
+    return el("details", { class: "manage-recurring" }, [
+      el("summary", {}, [`Manage all recurring tasks (${checklist.tasks.length})`]),
+      el("p", { class: "muted small", style: "margin: 8px 0 10px;" }, [
+        "Every task on this checklist, regardless of which day it's scheduled for — handy for setting up next Thursday's meeting while you're looking at today.",
+      ]),
+      el(
+        "div",
+        { class: "task-list" },
+        checklist.tasks
+          .slice()
+          .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+          .map((t) => renderTaskRow(t, { manageMode: true }))
+      ),
+    ]);
+  }
+
+  function openEditForm(taskId: string, text: string, difficulty: Difficulty, recurDays?: number[]) {
+    const isDaily = checklist.resetSchedule === "daily";
     const textInput = el("input", { type: "text", value: text }) as HTMLInputElement;
     const diffSelect = difficultySelect(difficulty);
+    const picker = isDaily ? weekdayPicker(recurDays && recurDays.length > 0 ? recurDays : ALL_WEEKDAYS) : null;
+
     const form = el("div", { class: "inline-form card", style: "margin: 8px 0;" }, [
       el("div", { class: "field" }, [el("label", {}, ["Task"]), textInput]),
       el("div", { class: "field" }, [el("label", {}, ["Difficulty"]), diffSelect]),
-      el("button", {
-        class: "primary small",
-        onclick: () => {
-          store.editTask(checklist.id, taskId, {
-            text: textInput.value,
-            difficulty: Number(diffSelect.value) as Difficulty,
-          });
-          paint();
+      picker ? el("div", { class: "field", style: "flex-basis:100%;" }, [el("label", {}, ["Recurs on"]), picker.wrap]) : null,
+      el(
+        "button",
+        {
+          class: "primary small",
+          onclick: () => {
+            const selectedDays = picker?.getSelected();
+            if (picker && (!selectedDays || selectedDays.length === 0)) {
+              showToast("Pick at least one day", "A task needs to recur on at least one day of the week.");
+              return;
+            }
+            store.editTask(checklist.id, taskId, {
+              text: textInput.value,
+              difficulty: Number(diffSelect.value) as Difficulty,
+              recurDays: selectedDays,
+            });
+            paint();
+          },
         },
-      }, ["Save"]),
+        ["Save"]
+      ),
       el("button", { class: "small ghost", onclick: () => paint() }, ["Cancel"]),
     ]);
     container.insertBefore(form, container.lastElementChild);
@@ -132,34 +239,54 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
       el("div", { style: "width:100%;" }, [`🃏 Swap out "${currentText}" for something else (1 Wildcard):`]),
       el("div", { class: "field" }, [el("label", {}, ["New task"]), textInput]),
       el("div", { class: "field" }, [el("label", {}, ["Difficulty"]), diffSelect]),
-      el("button", {
-        class: "primary small",
-        onclick: () => {
-          const ok = store.useWildcard(checklist.id, taskId, textInput.value, Number(diffSelect.value) as Difficulty);
-          if (!ok) { showToast("Couldn't use Wildcard", "Check you have one available and typed a new task.", "info"); }
-          paint();
+      el(
+        "button",
+        {
+          class: "primary small",
+          onclick: () => {
+            const ok = store.useWildcard(checklist.id, taskId, textInput.value, Number(diffSelect.value) as Difficulty);
+            if (!ok) {
+              showToast("Couldn't use Wildcard", "Check you have one available and typed a new task.", "info");
+            }
+            paint();
+          },
         },
-      }, ["Swap"]),
+        ["Swap"]
+      ),
       el("button", { class: "small ghost", onclick: () => paint() }, ["Cancel"]),
     ]);
     container.insertBefore(form, container.lastElementChild);
   }
 
-  function renderAddForm() {
+  function renderAddForm(isDaily: boolean) {
     const textInput = el("input", { type: "text", placeholder: "Add a task…" }) as HTMLInputElement;
     const diffSelect = difficultySelect(2);
+    const picker = isDaily ? weekdayPicker(ALL_WEEKDAYS) : null;
     const submit = () => {
       if (!textInput.value.trim()) return;
-      store.addTask(checklist.id, textInput.value, Number(diffSelect.value) as Difficulty);
+      const selectedDays = picker?.getSelected();
+      if (picker && (!selectedDays || selectedDays.length === 0)) {
+        showToast("Pick at least one day", "A task needs to recur on at least one day of the week.");
+        return;
+      }
+      store.addTask(checklist.id, textInput.value, Number(diffSelect.value) as Difficulty, selectedDays);
       paint();
     };
     textInput.addEventListener("keydown", (e) => {
       if ((e as KeyboardEvent).key === "Enter") submit();
     });
-    return el("div", { class: "inline-form", style: "margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);" }, [
-      el("div", { class: "field" }, [el("label", {}, ["New task"]), textInput]),
-      el("div", { class: "field", style: "flex: 0 0 170px;" }, [el("label", {}, ["Difficulty"]), diffSelect]),
-      el("button", { class: "primary", onclick: submit }, ["Add Task"]),
+    return el("div", { style: "margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);" }, [
+      el("div", { class: "inline-form" }, [
+        el("div", { class: "field" }, [el("label", {}, ["New task"]), textInput]),
+        el("div", { class: "field", style: "flex: 0 0 170px;" }, [el("label", {}, ["Difficulty"]), diffSelect]),
+        el("button", { class: "primary", onclick: submit }, ["Add Task"]),
+      ]),
+      picker
+        ? el("div", { class: "field", style: "margin-top: 10px;" }, [
+            el("label", {}, ["Recurs on (defaults to every day)"]),
+            picker.wrap,
+          ])
+        : null,
     ]);
   }
 }

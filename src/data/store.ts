@@ -31,6 +31,7 @@ import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
 import { defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
 import { pointsForDifficulty } from "./points.js";
 import { rollReward } from "./rewards.js";
+import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
 
 const STORAGE_KEY = "metro:v1:state";
 export const SCHEMA_VERSION = 1;
@@ -139,10 +140,15 @@ class Store {
       }
       if (checklist.lastResetDate === today) continue;
 
-      const totalTasks = checklist.tasks.length;
-      const completedTaskIds = checklist.tasks.filter((t) => t.completed).map((t) => t.id);
-      const missedTaskTexts = checklist.tasks.filter((t) => !t.completed).map((t) => t.text);
-      const pointsEarned = checklist.tasks
+      // Only the tasks scheduled for the day that's ending count toward
+      // that day's log — a Tuesday-only task shouldn't show up as "missed"
+      // on a Monday. See src/data/schedule.ts.
+      const endingDow = weekdayOfISODate(checklist.lastResetDate);
+      const dayTasks = tasksActiveOnWeekday(checklist.tasks, endingDow);
+      const totalTasks = dayTasks.length;
+      const completedTaskIds = dayTasks.filter((t) => t.completed).map((t) => t.id);
+      const missedTaskTexts = dayTasks.filter((t) => !t.completed).map((t) => t.text);
+      const pointsEarned = dayTasks
         .filter((t) => t.completed)
         .reduce((sum, t) => sum + pointsForDifficulty(this.state.settings.pointsConfig, t.difficulty), 0);
 
@@ -152,7 +158,9 @@ class Store {
         completedTaskIds,
         missedTaskTexts,
         pointsEarned,
-        fullyCompleted: totalTasks > 0 && completedTaskIds.length === totalTasks,
+        // A day with zero scheduled tasks (e.g. a non-work day) counts as
+        // complete rather than missed, so rest days don't break a streak.
+        fullyCompleted: completedTaskIds.length === totalTasks,
       };
 
       for (const t of checklist.tasks) {
@@ -263,7 +271,7 @@ class Store {
     this.emit();
   }
 
-  addTask(checklistId: string, text: string, difficulty: Difficulty): Task | null {
+  addTask(checklistId: string, text: string, difficulty: Difficulty, recurDays?: number[]): Task | null {
     const cl = this.findChecklist(checklistId);
     if (!cl || !text.trim()) return null;
     const task: Task = {
@@ -272,18 +280,26 @@ class Store {
       difficulty,
       completed: false,
       createdAt: new Date().toISOString(),
+      recurDays: recurDays && recurDays.length > 0 ? [...recurDays].sort((a, b) => a - b) : [...ALL_WEEKDAYS],
     };
     cl.tasks.push(task);
     this.emit();
     return task;
   }
 
-  editTask(checklistId: string, taskId: string, updates: { text?: string; difficulty?: Difficulty }): void {
+  editTask(
+    checklistId: string,
+    taskId: string,
+    updates: { text?: string; difficulty?: Difficulty; recurDays?: number[] }
+  ): void {
     const cl = this.findChecklist(checklistId);
     const task = cl?.tasks.find((t) => t.id === taskId);
     if (!task) return;
     if (updates.text !== undefined && updates.text.trim()) task.text = updates.text.trim();
     if (updates.difficulty !== undefined) task.difficulty = updates.difficulty;
+    if (updates.recurDays !== undefined && updates.recurDays.length > 0) {
+      task.recurDays = [...updates.recurDays].sort((a, b) => a - b);
+    }
     this.emit();
   }
 
@@ -319,7 +335,8 @@ class Store {
       // Intentionally not revoking points — see pointsAwarded doc comment.
     }
 
-    const checklistFullyCompleted = cl.tasks.length > 0 && cl.tasks.every((t) => t.completed);
+    const todaysTasks = activeTasksForChecklist(cl);
+    const checklistFullyCompleted = todaysTasks.length > 0 && todaysTasks.every((t) => t.completed);
 
     this.emit();
     return { task, pointsAwarded, checklistFullyCompleted, tiersGained, rewardsGranted };

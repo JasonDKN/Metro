@@ -11,6 +11,7 @@ import { computeStreak, recentHistory } from "../data/streak.js";
 import { formatFriendlyDate, todayISO } from "../util/date.js";
 import { pointsForDifficulty } from "../data/points.js";
 import { showToast } from "../ui/toast.js";
+import { activeTasksForChecklist, weekdayLabel } from "../data/schedule.js";
 
 function render(): void {
   const root = qs<HTMLElement>("#page-root");
@@ -18,11 +19,14 @@ function render(): void {
   const state = store.getState();
   const primary = store.getPrimaryChecklist();
   const streak = computeStreak(primary);
-  const todayPoints = primary.tasks
+  const todayPoints = activeTasksForChecklist(primary)
     .filter((t) => t.completed)
     .reduce((sum, t) => sum + pointsForDifficulty(state.settings.pointsConfig, t.difficulty), 0);
 
   qs("#today-date").textContent = formatFriendlyDate(todayISO());
+  const todayLabel = `${weekdayLabel(new Date().getDay())} ${primary.name}`;
+  qs("#page-title").textContent = todayLabel;
+  document.title = `Metro — ${todayLabel}`;
 
   const yLog = store.getYesterdayLog(primary.id);
   if (yLog && !yLog.fullyCompleted && !yLog.streakProtected && Object.keys(primary.history).length > 0) {
@@ -61,7 +65,7 @@ function render(): void {
     ])
   );
 
-  root.appendChild(renderChecklistCard(primary, { allowWildcard: true }));
+  root.appendChild(renderChecklistCard(primary, { allowWildcard: true, hideHeading: true }));
 
   const history = recentHistory(primary, 7);
   if (history.length > 0) {

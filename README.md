@@ -6,11 +6,19 @@ It's a static site (plain TypeScript compiled to JavaScript, no framework, no ba
 
 ## Pages
 
-- **Daily Checklist** (`index.html`) — the highlighted, top-priority list. Auto-resets every day; shows what you missed yesterday, your streak, and lets you spend a Streak Freeze or Wildcard token.
+- **Daily Checklist** (`index.html`) — the highlighted, top-priority list. Retitles itself each day (e.g. "Thursday Daily Checklist") and shows only the tasks scheduled for today — see "Weekday recurrence" below. Auto-resets every day; shows what you missed yesterday, your streak, and lets you spend a Streak Freeze or Wildcard token.
 - **Checklists** (`checklists.html`) — create as many additional checklists as you want. They don't auto-reset by default (you can opt a checklist into daily reset too).
 - **Shortcuts** (`shortcuts.html`) — quick links to websites and local files/folders (both open as real clickable links). Programs are listed as copyable reference paths, since browsers can't launch installed desktop applications for security reasons.
 - **Battlepass** (`battlepass.html`) — season progress, tier track, your unlocked reward gallery, and reward-pool management (add new reward categories/items any time without losing existing progress).
 - **Settings** (`settings.html`) — rename your assistant, apply unlocked themes/avatars/titles, tune points-per-difficulty and tier thresholds, and export/import a backup file.
+
+## Weekday recurrence
+
+Every task on the Daily Checklist (or on any custom checklist you've opted into daily reset) can be scheduled for any subset of the week — every day, weekdays only, or just one specific day. Rather than maintaining seven separate checklists, Metro keeps one shared task pool and filters it down to whatever's scheduled for today, so streaks, history, and points all stay in one continuous trail instead of being split across seven lists.
+
+- When adding or editing a task, pick which days it recurs on. Leaving every day checked (the default) means it shows up every day.
+- The checklist card only shows today's active tasks. To see or edit tasks scheduled for other days (e.g. setting up next Thursday's meeting while it's Monday), open "Manage all recurring tasks" underneath the list.
+- A day with nothing scheduled counts as complete for streak purposes, so days off don't break your streak.
 
 ## How points & the Battlepass work
 
