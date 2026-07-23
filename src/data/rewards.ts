@@ -1,71 +1,15 @@
 // ============================================================================
-// Battlepass reward rolling. Kept separate from the store so the "randomized
-// reward" rules can be tuned or replaced without touching state management.
+// Battlepass reward roadmap helpers. Rewards are fully deterministic — each
+// tier grants one specific item, in ascending rarity order, never randomly
+// rolled. The curated tier 1-15 assignments live in DEFAULT_REWARD_ROADMAP
+// (data/defaults.ts); this file provides the rarity helpers plus a fallback
+// for picking a reward for any tier that doesn't have a curated entry (e.g.
+// a tier added later in Settings, past the built-in 15).
 // ============================================================================
 
-import type { Rarity, RewardCategory, RewardItem } from "../types.js";
+import type { Rarity, RewardCategory } from "../types.js";
 
 const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
-
-/** How likely each rarity is to be picked, based on how far through the
- * season's tier track the reached tier is. Early tiers lean common; late
- * tiers lean toward epic/legendary. Weights don't need to sum to 100 — they
- * are normalized at roll time. */
-function rarityWeightsForProgress(progress: number): Record<Rarity, number> {
-  if (progress <= 0.25) return { common: 60, uncommon: 30, rare: 8, epic: 2, legendary: 0 };
-  if (progress <= 0.5) return { common: 35, uncommon: 40, rare: 20, epic: 4, legendary: 1 };
-  if (progress <= 0.75) return { common: 15, uncommon: 30, rare: 35, epic: 15, legendary: 5 };
-  return { common: 5, uncommon: 15, rare: 30, epic: 30, legendary: 20 };
-}
-
-export interface RollOptions {
-  tierNumber: number;
-  totalTiers: number;
-  categories: RewardCategory[];
-  /** Reward ids that are 'unlock' kind and already owned — excluded from
-   * future rolls so you don't get a duplicate cosmetic. Consumables are
-   * always eligible since stacking them is expected. */
-  alreadyUnlockedUnlockIds: Set<string>;
-  rng?: () => number;
-}
-
-/** Picks one reward item for a newly-reached tier, weighted by rarity. Returns
- * null only if literally every unlock-kind item across every category has
- * already been claimed and no consumables exist — meaning there's nothing
- * left to roll (a sign the user should add more reward categories/items). */
-export function rollReward(opts: RollOptions): RewardItem | null {
-  const { tierNumber, totalTiers, categories, alreadyUnlockedUnlockIds } = opts;
-  const rng = opts.rng ?? Math.random;
-  const progress = totalTiers > 0 ? tierNumber / totalTiers : 1;
-  const weights = rarityWeightsForProgress(progress);
-
-  const eligible: RewardItem[] = [];
-  for (const cat of categories) {
-    for (const item of cat.items) {
-      if (item.kind === "unlock" && alreadyUnlockedUnlockIds.has(item.id)) continue;
-      eligible.push(item);
-    }
-  }
-  if (eligible.length === 0) return null;
-
-  // Build a weighted pool: each item's weight comes from its rarity band.
-  const weighted = eligible.map((item) => ({ item, weight: weights[item.rarity] || 1 }));
-  const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
-
-  // If every eligible item happens to be in a zero-weight band (e.g. only
-  // legendary items left at a low tier), fall back to uniform selection
-  // rather than returning nothing.
-  if (totalWeight <= 0) {
-    return eligible[Math.floor(rng() * eligible.length)];
-  }
-
-  let roll = rng() * totalWeight;
-  for (const w of weighted) {
-    roll -= w.weight;
-    if (roll <= 0) return w.item;
-  }
-  return weighted[weighted.length - 1].item;
-}
 
 export function rarityLabel(r: Rarity): string {
   return r.charAt(0).toUpperCase() + r.slice(1);
@@ -73,4 +17,26 @@ export function rarityLabel(r: Rarity): string {
 
 export function rarityRank(r: Rarity): number {
   return RARITY_ORDER.indexOf(r);
+}
+
+/** Picks the next not-yet-assigned reward item, lowest rarity first, for a
+ * tier that doesn't have a curated roadmap entry. `excludeItemIds` should
+ * include every item id already assigned to another tier (so 'unlock' kind
+ * rewards are never promised twice) — consumables (Streak Freeze, Wildcard)
+ * are fine to exclude too here since each is only meant to anchor one tier
+ * in the roadmap, even though they can still stack in your inventory. */
+export function nextRoadmapItem(
+  categories: RewardCategory[],
+  excludeItemIds: Set<string>
+): { categoryId: string; itemId: string } | null {
+  const eligible: { categoryId: string; itemId: string; rarity: Rarity }[] = [];
+  for (const cat of categories) {
+    for (const item of cat.items) {
+      if (excludeItemIds.has(item.id)) continue;
+      eligible.push({ categoryId: cat.id, itemId: item.id, rarity: item.rarity });
+    }
+  }
+  if (eligible.length === 0) return null;
+  eligible.sort((a, b) => rarityRank(a.rarity) - rarityRank(b.rarity));
+  return eligible[0];
 }

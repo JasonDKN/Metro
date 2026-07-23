@@ -10,8 +10,82 @@ import { el, clear, qs } from "../ui/dom.js";
 import type { Rarity, RewardKind } from "../types.js";
 import { formatMonthLabel } from "../util/date.js";
 import { rarityLabel } from "../data/rewards.js";
+import { BUILT_IN_AVATARS } from "../data/defaults.js";
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
+
+/** Accent-color pairs mirroring each built-in theme's CSS custom properties
+ * (see body[data-theme="..."] in styles.css) — used to render a small
+ * gradient swatch for theme rewards instead of a generic icon, so you can
+ * see roughly what you're getting. User-added themes fall back to the
+ * default gradient. */
+const THEME_SWATCHES: Record<string, [string, string]> = {
+  "theme-default": ["#5b8cff", "#7b6bff"],
+  "theme-sunset": ["#ff8a5c", "#ff5c8a"],
+  "theme-forest": ["#4fbf7a", "#8fd35e"],
+  "theme-midnight": ["#7b8bff", "#4a5bcf"],
+  "theme-ocean": ["#38c6d9", "#4f8ff0"],
+  "theme-neon": ["#ff2fd0", "#2ff3ff"],
+  "theme-sakura": ["#ff9ec4", "#ffc9de"],
+  "theme-aurora": ["#4ff0c0", "#9a6bff"],
+};
+
+/** A little visual stand-in for a reward: a color swatch for themes (pulled
+ * from THEME_SWATCHES), the stored emoji for avatars, and a fitting emoji
+ * per other built-in category. Anything from a user-added category — where
+ * there's no way to know what it should look like — gets a generic gift
+ * icon. Keeps the page from being a wall of plain text. */
+function rewardVisual(categoryId: string, itemId: string, description?: string): HTMLElement {
+  if (categoryId === "cat-themes") {
+    const [c1, c2] = THEME_SWATCHES[itemId] ?? THEME_SWATCHES["theme-default"];
+    return el("span", { class: "reward-icon theme-swatch", style: `background: linear-gradient(135deg, ${c1}, ${c2});` });
+  }
+  const icon =
+    categoryId === "cat-avatars"
+      ? description || "🧑"
+      : categoryId === "cat-titles"
+        ? "🎖️"
+        : categoryId === "cat-effects"
+          ? "✨"
+          : categoryId === "cat-streak-freeze"
+            ? "❄️"
+            : categoryId === "cat-wildcard"
+              ? "🃏"
+              : "🎁";
+  return el("span", { class: "reward-icon" }, [icon]);
+}
+
+function renderProfileBanner(): HTMLElement {
+  const state = store.getState();
+  const s = state.settings;
+  const bp = state.battlepass;
+
+  const builtInAvatar = BUILT_IN_AVATARS.find((a) => a.id === s.activeAvatarId);
+  const avatarEmoji =
+    builtInAvatar?.emoji ??
+    bp.categories.find((c) => c.id === "cat-avatars")?.items.find((i) => i.id === s.activeAvatarId)?.description ??
+    "🧭";
+  const titleItem = s.activeTitleId
+    ? bp.categories.find((c) => c.id === "cat-titles")?.items.find((i) => i.id === s.activeTitleId)
+    : null;
+
+  const nextTier = bp.tiers.find((t) => t.tier === bp.currentTier + 1);
+  const currentTierPoints = bp.tiers.find((t) => t.tier === bp.currentTier)?.pointsRequired ?? 0;
+  const span = nextTier ? nextTier.pointsRequired - currentTierPoints : 1;
+  const progress = nextTier ? Math.min(1, Math.max(0, (bp.seasonPoints - currentTierPoints) / (span || 1))) : 1;
+
+  return el("div", { class: "card profile-banner" }, [
+    el("div", { class: "profile-avatar" }, [avatarEmoji]),
+    el("div", { style: "flex:1; min-width:160px;" }, [
+      el("div", { class: "profile-name" }, [s.assistantName, titleItem ? el("span", { class: "profile-title" }, [titleItem.name]) : null]),
+      el("div", { class: "muted small" }, [
+        nextTier ? `${bp.seasonPoints} / ${nextTier.pointsRequired} pts to Tier ${nextTier.tier}` : `${bp.seasonPoints} pts — max tier reached`,
+      ]),
+      el("div", { class: "progress-bar", style: "margin-top:6px;" }, [el("div", { style: `width:${Math.round(progress * 100)}%` })]),
+    ]),
+    el("div", { class: "profile-tier-badge" }, [el("div", {}, [String(bp.currentTier)]), el("div", { class: "small" }, ["TIER"])]),
+  ]);
+}
 
 function renderHeader(): HTMLElement {
   const state = store.getState();
@@ -26,17 +100,45 @@ function renderHeader(): HTMLElement {
 
 function renderTierTrack(): HTMLElement {
   const bp = store.getState().battlepass;
+  const roadmapByTier = new Map(bp.rewardRoadmap.map((r) => [r.tier, r]));
+
   return el("div", { class: "card" }, [
     el("h2", {}, ["Tier Track"]),
+    el("p", { class: "muted small" }, [
+      "Every tier grants one specific reward — no randomization — in increasing rarity as you climb. Here's the whole roadmap.",
+    ]),
     el(
       "div",
-      { class: "tier-track" },
-      bp.tiers.map((t) =>
-        el("div", { class: `tier-node${t.tier <= bp.currentTier ? " reached" : ""}` }, [
-          el("div", { class: "tier-num" }, [String(t.tier)]),
-          el("div", { class: "muted" }, [`${t.pointsRequired} pts`]),
-        ])
-      )
+      { class: "tier-roadmap" },
+      bp.tiers.map((t) => {
+        const roadmap = roadmapByTier.get(t.tier);
+        const category = roadmap ? bp.categories.find((c) => c.id === roadmap.categoryId) : undefined;
+        const item = roadmap ? category?.items.find((i) => i.id === roadmap.itemId) : undefined;
+        const status: "reached" | "next" | "locked" =
+          t.tier <= bp.currentTier ? "reached" : t.tier === bp.currentTier + 1 ? "next" : "locked";
+
+        return el("div", { class: `tier-card tier-${status}` }, [
+          el("div", { class: "tier-card-top" }, [
+            el("div", { class: "tier-badge" }, [String(t.tier)]),
+            el("div", { class: "muted small" }, [`${t.pointsRequired} pts`]),
+          ]),
+          item && category
+            ? el("div", { class: "tier-reward" }, [
+                rewardVisual(category.id, item.id, item.description),
+                el("div", {}, [
+                  el("div", { class: "tier-reward-name" }, [item.name]),
+                  el("div", { class: `rarity-${item.rarity} small` }, [
+                    rarityLabel(item.rarity),
+                    item.kind === "consumable" ? " · consumable" : "",
+                  ]),
+                ]),
+              ])
+            : el("p", { class: "muted small", style: "margin:0;" }, ["No reward assigned yet — add one from the pool below."]),
+          el("div", { class: `tier-status${status === "locked" ? " locked" : ""}` }, [
+            status === "reached" ? "✓ Unlocked" : status === "next" ? "Next up" : "🔒 Locked",
+          ]),
+        ]);
+      })
     ),
   ]);
 }
@@ -63,13 +165,17 @@ function renderUnlockedGallery(): HTMLElement {
     el(
       "div",
       { class: "reward-grid" },
-      sorted.map((r) =>
-        el("div", { class: "reward-chip" }, [
-          el("div", { class: "name" }, [r.name]),
-          el("div", { class: `rarity-${r.rarity}` }, [rarityLabel(r.rarity)]),
-          el("div", { class: "muted" }, [`${r.categoryName} · Tier ${r.tier}`]),
-        ])
-      )
+      sorted.map((r) => {
+        const item = bp.categories.find((c) => c.id === r.categoryId)?.items.find((i) => i.id === r.rewardId);
+        return el("div", { class: "reward-chip" }, [
+          rewardVisual(r.categoryId, r.rewardId, item?.description),
+          el("div", {}, [
+            el("div", { class: "name" }, [r.name]),
+            el("div", { class: `rarity-${r.rarity}` }, [rarityLabel(r.rarity)]),
+            el("div", { class: "muted" }, [`${r.categoryName} · Tier ${r.tier}`]),
+          ]),
+        ]);
+      })
     ),
   ]);
 }
@@ -94,9 +200,12 @@ function renderRewardPool(): HTMLElement {
         cat.items.map((item) => {
           const owned = item.kind === "consumable" || unlockedUnlockIds.has(item.id);
           return el("div", { class: "reward-chip", style: owned ? "" : "opacity:0.5;" }, [
-            el("div", { class: "name" }, [item.name + (owned ? " ✓" : "")]),
-            el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity), item.kind === "consumable" ? " · consumable" : ""]),
-            el("button", { class: "small danger ghost", onclick: () => store.deleteRewardItem(cat.id, item.id) }, ["Remove"]),
+            rewardVisual(cat.id, item.id, item.description),
+            el("div", {}, [
+              el("div", { class: "name" }, [item.name + (owned ? " ✓" : "")]),
+              el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity), item.kind === "consumable" ? " · consumable" : ""]),
+              el("button", { class: "small danger ghost", style: "margin-top:4px;", onclick: () => store.deleteRewardItem(cat.id, item.id) }, ["Remove"]),
+            ]),
           ]);
         })
       ),
@@ -107,7 +216,7 @@ function renderRewardPool(): HTMLElement {
   return el("div", { class: "card" }, [
     el("h2", {}, ["Reward Pool"]),
     el("p", { class: "muted small" }, [
-      "Every tier grants a randomly-rolled reward from this pool — rarer rewards get more likely at higher tiers. Add new categories or items any time; it never affects what you've already unlocked.",
+      "Each tier grants one specific reward from this pool, assigned in ascending rarity order — see the Tier Track above for exactly what's coming, no surprises. Add new categories or items any time; it never affects what you've already unlocked, and new items become available to fill any tier that's still waiting on one.",
     ]),
     ...categoryBlocks,
     renderAddCategoryForm(),
@@ -172,6 +281,7 @@ function renderSeasonHistory(): HTMLElement | null {
 function render(): void {
   const root = qs<HTMLElement>("#page-root");
   clear(root);
+  root.appendChild(renderProfileBanner());
   root.appendChild(renderHeader());
   root.appendChild(renderTierTrack());
   root.appendChild(renderInventory());

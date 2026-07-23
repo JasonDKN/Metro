@@ -5,7 +5,7 @@
 // a brand-new install.
 // ============================================================================
 
-import type { PointsConfig, RewardCategory, Tier, Settings } from "../types.js";
+import type { PointsConfig, RewardCategory, RewardRoadmapEntry, Tier, Settings } from "../types.js";
 
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {
   1: 5, // Easy
@@ -33,6 +33,32 @@ export const DEFAULT_TIERS: Tier[] = [
   { tier: 13, pointsRequired: 2100 },
   { tier: 14, pointsRequired: 2400 },
   { tier: 15, pointsRequired: 2720 },
+];
+
+/** The curated, deterministic tier -> reward assignments for tiers 1-15 —
+ * strictly ascending rarity (common through legendary), so what you'll earn
+ * at each tier is knowable in advance rather than randomly rolled. Item ids
+ * reference the built-in categories below. If a tier from here is ever
+ * unreachable (its item was deleted, or the roadmap already used that item
+ * for an earlier tier), Store.ensureRewardRoadmap falls back to the next
+ * lowest-rarity item still available — and any tier beyond 15 (added later
+ * in Settings) is assigned the same way. */
+export const DEFAULT_REWARD_ROADMAP: RewardRoadmapEntry[] = [
+  { tier: 1, categoryId: "cat-themes", itemId: "theme-sunset" },
+  { tier: 2, categoryId: "cat-avatars", itemId: "avatar-owl" },
+  { tier: 3, categoryId: "cat-titles", itemId: "title-rookie" },
+  { tier: 4, categoryId: "cat-effects", itemId: "effect-confetti" },
+  { tier: 5, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
+  { tier: 6, categoryId: "cat-themes", itemId: "theme-midnight" },
+  { tier: 7, categoryId: "cat-avatars", itemId: "avatar-fox" },
+  { tier: 8, categoryId: "cat-titles", itemId: "title-taskmaster" },
+  { tier: 9, categoryId: "cat-wildcard", itemId: "item-wildcard" },
+  { tier: 10, categoryId: "cat-themes", itemId: "theme-neon" },
+  { tier: 11, categoryId: "cat-avatars", itemId: "avatar-star" },
+  { tier: 12, categoryId: "cat-titles", itemId: "title-pro" },
+  { tier: 13, categoryId: "cat-themes", itemId: "theme-sakura" },
+  { tier: 14, categoryId: "cat-avatars", itemId: "avatar-dragon" },
+  { tier: 15, categoryId: "cat-themes", itemId: "theme-aurora" },
 ];
 
 export const DEFAULT_THEME_ID = "theme-default";
@@ -120,19 +146,6 @@ export function defaultRewardCategories(): RewardCategory[] {
         { id: "effect-starfall", categoryId: "cat-effects", name: "Starfall", rarity: "rare", kind: "unlock" },
         { id: "effect-aurora", categoryId: "cat-effects", name: "Aurora Wave", rarity: "epic", kind: "unlock" },
         { id: "effect-fanfare", categoryId: "cat-effects", name: "Metro Fanfare", rarity: "legendary", kind: "unlock" },
-      ],
-    },
-    {
-      id: "cat-badges",
-      name: "Badges",
-      description: "Trophies on display in your profile.",
-      builtIn: true,
-      items: [
-        { id: "badge-bronze", categoryId: "cat-badges", name: "Bronze Star", rarity: "common", kind: "unlock" },
-        { id: "badge-silver", categoryId: "cat-badges", name: "Silver Star", rarity: "uncommon", kind: "unlock" },
-        { id: "badge-gold", categoryId: "cat-badges", name: "Gold Star", rarity: "rare", kind: "unlock" },
-        { id: "badge-platinum", categoryId: "cat-badges", name: "Platinum Medal", rarity: "epic", kind: "unlock" },
-        { id: "badge-trophy", categoryId: "cat-badges", name: "Metro Trophy", rarity: "legendary", kind: "unlock" },
       ],
     },
     {

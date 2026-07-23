@@ -169,6 +169,18 @@ export interface UnlockedReward {
   unlockedAt: string;
 }
 
+/** A fixed, deterministic assignment of one reward item to one tier — the
+ * whole point being that you can look this up in advance instead of a
+ * reward being randomly rolled when you get there. Built ascending by
+ * rarity; see DEFAULT_REWARD_ROADMAP in data/defaults.ts for the curated
+ * starting lineup and Store.ensureRewardRoadmap for how it extends to tiers
+ * added later. */
+export interface RewardRoadmapEntry {
+  tier: number;
+  categoryId: string;
+  itemId: string;
+}
+
 export interface Battlepass {
   /** Current season, e.g. "2026-07". Points reset to 0 when this rolls over. */
   currentMonthKey: string;
@@ -180,6 +192,10 @@ export interface Battlepass {
   currentTier: number;
   tiers: Tier[];
   categories: RewardCategory[];
+  /** The deterministic tier -> reward mapping (ascending rarity). Reaching a
+   * tier grants exactly the item its roadmap entry points to — nothing is
+   * randomly rolled. */
+  rewardRoadmap: RewardRoadmapEntry[];
   unlocked: UnlockedReward[];
   /** Consumable reward counts by reward id (e.g. streak freezes, wildcards). */
   inventory: Record<string, number>;

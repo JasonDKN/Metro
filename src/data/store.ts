@@ -30,10 +30,10 @@ import type {
 import { loadRaw, saveRaw } from "../util/storage.js";
 import { makeId } from "../util/id.js";
 import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
-import { defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
+import { DEFAULT_REWARD_ROADMAP, defaultRewardCategories, defaultSettings, DEFAULT_TIERS } from "./defaults.js";
 import { computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
-import { rollReward } from "./rewards.js";
+import { nextRoadmapItem } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
 import { isTrialChecklistId, TRIAL_SLOT_IDS, trialSlotNumber } from "./trials.js";
 
@@ -94,6 +94,7 @@ function createDefaultState(): AppState {
       currentTier: 0,
       tiers: DEFAULT_TIERS.map((t) => ({ ...t })),
       categories: defaultRewardCategories(),
+      rewardRoadmap: [],
       unlocked: [],
       inventory: {},
       seasonHistory: {},
@@ -118,6 +119,8 @@ class Store {
     this.state = loaded ? migrate(loaded) : createDefaultState();
     this.ensureTrialChecklists();
     this.ensureDailyGames();
+    this.ensureRewardRoadmap();
+    this.removeBadgesCategory();
     this.renamePrimaryIfDefault();
     this.processDueRollovers();
     this.save();
@@ -159,6 +162,84 @@ class Store {
     const existingIds = new Set(this.state.dailyGames.configs.map((c) => c.id));
     for (const config of defaultDailyGamesState().configs) {
       if (!existingIds.has(config.id)) this.state.dailyGames.configs.push(config);
+    }
+  }
+
+  /** Builds/extends the deterministic tier -> reward roadmap so every
+   * currently-defined tier has a known reward, in ascending rarity order —
+   * see DEFAULT_REWARD_ROADMAP for the curated tiers 1-15. A tier added
+   * later (Settings lets you add more) gets the next lowest-rarity unused
+   * item automatically. Items already owned via an 'unlock' reward (even one
+   * granted before this deterministic system existed) are skipped so a
+   * future tier is never promised something you already have. Entries
+   * already assigned are never changed, so a tier's promised reward stays
+   * stable even if the pool changes later. Idempotent. */
+  private ensureRewardRoadmap(): void {
+    const bp = this.state.battlepass;
+    if (!bp.rewardRoadmap) bp.rewardRoadmap = [];
+    const assignedTiers = new Set(bp.rewardRoadmap.map((r) => r.tier));
+    const usedItemIds = new Set(bp.rewardRoadmap.map((r) => r.itemId));
+    for (const u of bp.unlocked) {
+      if (u.kind === "unlock") usedItemIds.add(u.rewardId);
+    }
+
+    const itemExists = (categoryId: string, itemId: string) =>
+      !!bp.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId);
+
+    for (const tierDef of [...bp.tiers].sort((a, b) => a.tier - b.tier)) {
+      if (assignedTiers.has(tierDef.tier)) continue;
+
+      let categoryId: string | undefined;
+      let itemId: string | undefined;
+      const curated = DEFAULT_REWARD_ROADMAP.find(
+        (r) => r.tier === tierDef.tier && !usedItemIds.has(r.itemId) && itemExists(r.categoryId, r.itemId)
+      );
+      if (curated) {
+        categoryId = curated.categoryId;
+        itemId = curated.itemId;
+      } else {
+        const next = nextRoadmapItem(bp.categories, usedItemIds);
+        if (next) {
+          categoryId = next.categoryId;
+          itemId = next.itemId;
+        }
+      }
+      if (!categoryId || !itemId) continue; // pool exhausted; tier gets no reward for now
+
+      bp.rewardRoadmap.push({ tier: tierDef.tier, categoryId, itemId });
+      usedItemIds.add(itemId);
+      assignedTiers.add(tierDef.tier);
+    }
+    bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
+  }
+
+  /** Drops any roadmap entries for tiers not yet reached that point at a
+   * reward which no longer exists (its item/category was deleted from the
+   * pool), then refills those tiers from what's left — keeps the
+   * upcoming-rewards preview always accurate. Already-reached tiers' entries
+   * are left untouched, same as their granted UnlockedReward record. */
+  private reconcileRoadmapForUpcomingTiers(): void {
+    const bp = this.state.battlepass;
+    const itemExists = (categoryId: string, itemId: string) =>
+      !!bp.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId);
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => r.tier <= bp.currentTier || itemExists(r.categoryId, r.itemId));
+    this.ensureRewardRoadmap();
+  }
+
+  /** One-time-but-idempotent cleanup: the built-in "Badges" reward category
+   * has been removed in favor of the fully deterministic reward roadmap
+   * above (which never included badges). Any tier that had already been
+   * granted a Badge under the old random-roll system gets a real
+   * replacement reward from the new roadmap instead, so hitting that tier
+   * still means something. */
+  private removeBadgesCategory(): void {
+    const bp = this.state.battlepass;
+    if (!bp.categories.some((c) => c.id === "cat-badges")) return;
+    bp.categories = bp.categories.filter((c) => c.id !== "cat-badges");
+    const orphanedTiers = bp.unlocked.filter((u) => u.categoryId === "cat-badges").map((u) => u.tier);
+    bp.unlocked = bp.unlocked.filter((u) => u.categoryId !== "cat-badges");
+    for (const tier of orphanedTiers) {
+      this.grantTierReward(tier, []);
     }
   }
 
@@ -324,6 +405,7 @@ class Store {
   updateTiers(tiers: Tier[]): void {
     const sorted = [...tiers].sort((a, b) => a.tier - b.tier);
     this.state.battlepass.tiers = sorted;
+    this.ensureRewardRoadmap();
     this.emit();
   }
 
@@ -545,7 +627,6 @@ class Store {
     bp.seasonPoints += amount;
     bp.lifetimePoints += amount;
 
-    const totalTiers = bp.tiers.length;
     const highestEligible = [...bp.tiers]
       .filter((t) => bp.seasonPoints >= t.pointsRequired)
       .sort((a, b) => a.tier - b.tier);
@@ -554,38 +635,42 @@ class Store {
       if (tierDef.tier <= bp.currentTier) continue;
       bp.currentTier = tierDef.tier;
       tiersGainedOut.push(tierDef.tier);
+      this.grantTierReward(tierDef.tier, rewardsGrantedOut);
+    }
+  }
 
-      const alreadyUnlockedUnlockIds = new Set(
-        bp.unlocked.filter((u) => u.kind === "unlock").map((u) => u.rewardId)
-      );
-      const reward = rollReward({
-        tierNumber: tierDef.tier,
-        totalTiers,
-        categories: bp.categories,
-        alreadyUnlockedUnlockIds,
-      });
-      if (!reward) continue;
+  /** Grants the deterministic roadmap reward for a tier — used both when a
+   * tier is freshly reached (from awardPoints) and when backfilling a
+   * replacement for a reward that's since been invalidated (see
+   * removeBadgesCategory). Won't double-grant an 'unlock' kind reward that's
+   * already owned; consumables always stack so they're granted regardless. */
+  private grantTierReward(tierNumber: number, rewardsGrantedOut: UnlockedReward[]): void {
+    const bp = this.state.battlepass;
+    const roadmapEntry = bp.rewardRoadmap.find((r) => r.tier === tierNumber);
+    if (!roadmapEntry) return;
+    const category = bp.categories.find((c) => c.id === roadmapEntry.categoryId);
+    const item = category?.items.find((i) => i.id === roadmapEntry.itemId);
+    if (!category || !item) return;
+    if (item.kind === "unlock" && bp.unlocked.some((u) => u.rewardId === item.id)) return;
 
-      const category = bp.categories.find((c) => c.id === reward.categoryId);
-      const unlocked: UnlockedReward = {
-        tier: tierDef.tier,
-        monthKey: bp.currentMonthKey,
-        rewardId: reward.id,
-        categoryId: reward.categoryId,
-        name: reward.name,
-        rarity: reward.rarity,
-        kind: reward.kind,
-        categoryName: category?.name ?? "Reward",
-        unlockedAt: new Date().toISOString(),
-      };
-      bp.unlocked.push(unlocked);
-      rewardsGrantedOut.push(unlocked);
+    const unlocked: UnlockedReward = {
+      tier: tierNumber,
+      monthKey: bp.currentMonthKey,
+      rewardId: item.id,
+      categoryId: item.categoryId,
+      name: item.name,
+      rarity: item.rarity,
+      kind: item.kind,
+      categoryName: category.name,
+      unlockedAt: new Date().toISOString(),
+    };
+    bp.unlocked.push(unlocked);
+    rewardsGrantedOut.push(unlocked);
 
-      if (reward.kind === "consumable") {
-        bp.inventory[reward.id] = (bp.inventory[reward.id] ?? 0) + 1;
-      } else {
-        this.applyUnlockEffect(reward.categoryId, reward.id);
-      }
+    if (item.kind === "consumable") {
+      bp.inventory[item.id] = (bp.inventory[item.id] ?? 0) + 1;
+    } else {
+      this.applyUnlockEffect(item.categoryId, item.id);
     }
   }
 
@@ -686,9 +771,13 @@ class Store {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
     if (!cat || cat.builtIn) return;
     this.state.battlepass.categories = this.state.battlepass.categories.filter((c) => c.id !== categoryId);
+    this.reconcileRoadmapForUpcomingTiers();
     this.emit();
   }
 
+  /** Adds a new reward item to the pool. Also extends the tier roadmap in
+   * case an earlier tier had run out of eligible rewards and was left
+   * without one — this new item becomes available to fill it in. */
   addRewardItem(categoryId: string, name: string, rarity: Rarity, kind: RewardKind, description = ""): void {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
     if (!cat || !name.trim()) return;
@@ -700,6 +789,7 @@ class Store {
       rarity,
       kind,
     });
+    this.ensureRewardRoadmap();
     this.emit();
   }
 
@@ -707,6 +797,7 @@ class Store {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
     if (!cat) return;
     cat.items = cat.items.filter((i) => i.id !== itemId);
+    this.reconcileRoadmapForUpcomingTiers();
     this.emit();
   }
 
@@ -820,6 +911,8 @@ class Store {
       this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
       this.ensureTrialChecklists();
       this.ensureDailyGames();
+      this.ensureRewardRoadmap();
+      this.removeBadgesCategory();
       this.renamePrimaryIfDefault();
       this.processDueRollovers();
       this.emit();

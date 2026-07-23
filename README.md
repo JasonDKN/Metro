@@ -56,8 +56,9 @@ Recording a score again for the same day replaces the previous entry and correct
 - Every task you add gets a difficulty (Easy → Extreme). Completing it awards points based on that difficulty (values are editable in Settings).
 - Points are purely additive — there's no penalty for missing or unchecking a task. Deleting a task you'd already completed does revoke the points it earned (they'd otherwise be sitting there with nothing behind them), but any battlepass tier/reward you already unlocked along the way stays unlocked.
 - Season points reset to 0 on the 1st of each month; lifetime points never reset.
-- Reaching a new tier randomly rolls a reward from the reward pool (rarer rewards get more likely at higher tiers): themes, avatars, titles, celebration effects, badges, and consumable Streak Freeze / Wildcard tokens.
-- You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked.
+- Reaching a new tier grants one **specific** reward — no randomization. Rewards are assigned to tiers in advance, in strictly increasing rarity as you climb (common early tiers, legendary at the top), so the Tier Track on the Battlepass page always shows exactly what every tier gives, including ones you haven't reached yet. Reward categories: themes, avatars, titles, celebration effects, and consumable Streak Freeze / Wildcard tokens.
+- You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked, and new items become available to fill any tier that was still waiting on one (e.g. if you extend the tier track further than the pool currently covers).
+- The Battlepass page also shows a profile banner (your equipped avatar, name, title, and progress to the next tier) and icons throughout — a color swatch for each theme, an emoji for avatars/titles/effects/consumables — so it's not just plain text and numbers.
 
 ## Local development
 
