@@ -54,6 +54,9 @@ export function celebrate(): void {
     case "effect-fanfare":
       metroFanfare(layer);
       break;
+    case "effect-purple-ocean":
+      purpleOcean(layer);
+      break;
     case "effect-confetti":
     default:
       confettiBurst(layer);
@@ -140,6 +143,23 @@ function auroraWave(layer: HTMLElement): void {
       setTimeout(() => band.remove(), 2800);
     }, i * 260);
   });
+}
+
+/** A sea of small glowing lights rising and swaying up from the bottom of
+ * the screen, in ARMY Bomb purple/lilac/white — modeled on the ocean of
+ * lightsticks BTS fans raise at concerts. Part of the BTS Season pack. */
+function purpleOcean(layer: HTMLElement, pieceCount = 55): void {
+  const glows = ["#b18aff", "#8a5cf6", "#d8c4ff", "#ffffff", "#6c3fc9"];
+  for (let i = 0; i < pieceCount; i++) {
+    const light = el("div", {
+      class: "ocean-light",
+      style: `left:${Math.random() * 100}%; --glow:${glows[i % glows.length]}; --sway:${
+        Math.random() * 40 - 20
+      }px; animation-duration:${2.4 + Math.random() * 1.6}s; animation-delay:${Math.random() * 0.6}s;`,
+    });
+    layer.appendChild(light);
+    setTimeout(() => light.remove(), 4600);
+  }
 }
 
 /** The grand finale — a bigger confetti burst plus a couple of firework

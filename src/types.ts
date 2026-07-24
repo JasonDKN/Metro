@@ -137,6 +137,15 @@ export interface RewardItem {
   categoryId: string;
   name: string;
   description?: string;
+  /** Optional short trivia/flavor caption shown under the item's name once
+   * it's actually owned (Inventory, Unlocked Rewards) — lets a reward carry
+   * some context without cluttering the name itself. */
+  flavorText?: string;
+  /** Base64 data: URL of a user-uploaded photo. Currently only used by the
+   * Photocards category. Callers must only render this where ownership is
+   * already confirmed — see rewardVisual's `revealed` option — so a photo
+   * attached ahead of time stays hidden until its tier is actually reached. */
+  imageDataUrl?: string;
   rarity: Rarity;
   kind: RewardKind;
 }

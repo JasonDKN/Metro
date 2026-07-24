@@ -20,7 +20,9 @@ import type {
   PointsConfig,
   ResetSchedule,
   Rarity,
+  RewardItem,
   RewardKind,
+  RewardRoadmapEntry,
   Shortcut,
   ShortcutKind,
   Task,
@@ -31,12 +33,18 @@ import { loadRaw, saveRaw } from "../util/storage.js";
 import { makeId } from "../util/id.js";
 import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
 import {
+  BTS_NEW_AVATARS,
+  BTS_NEW_EFFECT,
+  BTS_NEW_THEME,
+  BTS_NEW_TITLES,
   DEFAULT_AVATAR_ID,
   DEFAULT_REWARD_ROADMAP,
   DEFAULT_THEME_ID,
   defaultRewardCategories,
   defaultSettings,
   DEFAULT_TIERS,
+  PHOTOCARD_SEED_ITEM,
+  SEASONAL_REWARD_ROADMAPS,
 } from "./defaults.js";
 import { bestDailyGameEntry, bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
@@ -126,6 +134,7 @@ class Store {
     this.state = loaded ? migrate(loaded) : createDefaultState();
     this.ensureTrialChecklists();
     this.ensureDailyGames();
+    this.ensureBtsRewardPack();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
@@ -133,7 +142,12 @@ class Store {
     this.dedupeDuplicateTierGrants();
     this.ensureActiveCosmeticsValid();
     this.renamePrimaryIfDefault();
-    this.processDueRollovers();
+    const rolledOver = this.processDueRollovers();
+    // A month boundary just crossed — if the new season has its own
+    // scheduled curated table (see SEASONAL_REWARD_ROADMAPS), swap it into
+    // the now-fully-upcoming tiers right away instead of waiting for the
+    // next full page load. Idempotent, so re-running it here is safe.
+    if (rolledOver) this.syncUpcomingTiersToCuratedRoadmap();
     this.save();
   }
 
@@ -176,6 +190,82 @@ class Store {
     }
   }
 
+  /** Seeds the BTS Season reward pack into the pool ahead of time — new
+   * titles/avatars/a theme/an effect appended to their existing built-in
+   * categories, plus a brand-new Photocards category with one placeholder
+   * "Surprise Photocard" reserved for tier 13. See defaults.ts for the item
+   * list and BTS_SEASON_MONTH_KEY.
+   *
+   * Adding these to the pool does NOT grant, promise, or reveal anything by
+   * itself — only SEASONAL_REWARD_ROADMAPS decides which season's roadmap
+   * is active, and that only takes effect once the season actually rolls
+   * over to that monthKey (see activeCuratedRoadmap). Must run before
+   * ensureRewardRoadmap/syncUpcomingTiersToCuratedRoadmap so those see the
+   * new items. Idempotent — only adds items not already present, matched
+   * by id, so re-running this after the user has edited/deleted any of
+   * them is safe (it won't resurrect a deleted one... unless the category
+   * itself still exists and the specific item id is gone, in which case
+   * treat that the same as any other user deletion: left alone). */
+  private ensureBtsRewardPack(): void {
+    const bp = this.state.battlepass;
+
+    const titles = bp.categories.find((c) => c.id === "cat-titles");
+    if (titles) {
+      for (const t of BTS_NEW_TITLES) {
+        if (titles.items.some((i) => i.id === t.id)) continue;
+        titles.items.push({ id: t.id, categoryId: "cat-titles", name: t.name, flavorText: t.flavorText, rarity: t.rarity, kind: "unlock" });
+      }
+    }
+
+    const avatars = bp.categories.find((c) => c.id === "cat-avatars");
+    if (avatars) {
+      for (const a of BTS_NEW_AVATARS) {
+        if (avatars.items.some((i) => i.id === a.id)) continue;
+        avatars.items.push({ id: a.id, categoryId: "cat-avatars", name: a.name, description: a.emoji, flavorText: a.flavorText, rarity: a.rarity, kind: "unlock" });
+      }
+    }
+
+    const themes = bp.categories.find((c) => c.id === "cat-themes");
+    if (themes && !themes.items.some((i) => i.id === BTS_NEW_THEME.id)) {
+      themes.items.push({ id: BTS_NEW_THEME.id, categoryId: "cat-themes", name: BTS_NEW_THEME.name, flavorText: BTS_NEW_THEME.flavorText, rarity: BTS_NEW_THEME.rarity, kind: "unlock" });
+    }
+
+    const effects = bp.categories.find((c) => c.id === "cat-effects");
+    if (effects && !effects.items.some((i) => i.id === BTS_NEW_EFFECT.id)) {
+      effects.items.push({ id: BTS_NEW_EFFECT.id, categoryId: "cat-effects", name: BTS_NEW_EFFECT.name, flavorText: BTS_NEW_EFFECT.flavorText, rarity: BTS_NEW_EFFECT.rarity, kind: "unlock" });
+    }
+
+    if (!bp.categories.some((c) => c.id === "cat-photocards")) {
+      bp.categories.push({
+        id: "cat-photocards",
+        name: "Photocards",
+        description: "Surprise photocards — the photo stays hidden until you actually reach the tier that grants it.",
+        builtIn: true,
+        items: [],
+      });
+    }
+    const photocards = bp.categories.find((c) => c.id === "cat-photocards")!;
+    if (!photocards.items.some((i) => i.id === PHOTOCARD_SEED_ITEM.id)) {
+      photocards.items.push({
+        id: PHOTOCARD_SEED_ITEM.id,
+        categoryId: "cat-photocards",
+        name: PHOTOCARD_SEED_ITEM.name,
+        flavorText: PHOTOCARD_SEED_ITEM.flavorText,
+        rarity: PHOTOCARD_SEED_ITEM.rarity,
+        kind: "unlock",
+      });
+    }
+  }
+
+  /** Which curated tier->reward table is "live" right now — the current
+   * season's scheduled table (see SEASONAL_REWARD_ROADMAPS) if one exists
+   * for bp.currentMonthKey, otherwise the evergreen DEFAULT_REWARD_ROADMAP.
+   * Centralizing the lookup here is what lets a season like BTS August be
+   * scheduled ahead of time without touching any other month's tiers. */
+  private activeCuratedRoadmap(): RewardRoadmapEntry[] {
+    return SEASONAL_REWARD_ROADMAPS[this.state.battlepass.currentMonthKey] ?? DEFAULT_REWARD_ROADMAP;
+  }
+
   /** Builds/extends the deterministic tier -> reward roadmap so every
    * currently-defined tier has a known reward, in ascending rarity order —
    * see DEFAULT_REWARD_ROADMAP for the curated tiers 1-15. A tier added
@@ -197,19 +287,30 @@ class Store {
     const itemExists = (categoryId: string, itemId: string) =>
       !!bp.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId);
 
+    // Photocards are only ever granted via an explicit curated roadmap
+    // entry (see AUGUST_BTS_REWARD_ROADMAP), never as a generic
+    // rarity-ordered filler for some unrelated tier — otherwise a
+    // Photocard could leak into a season it was never scheduled for.
+    const fallbackExcludeIds = new Set(usedItemIds);
+    for (const cat of bp.categories) {
+      if (cat.id !== "cat-photocards") continue;
+      for (const item of cat.items) fallbackExcludeIds.add(item.id);
+    }
+
+    const curatedRoadmap = this.activeCuratedRoadmap();
     for (const tierDef of [...bp.tiers].sort((a, b) => a.tier - b.tier)) {
       if (assignedTiers.has(tierDef.tier)) continue;
 
       let categoryId: string | undefined;
       let itemId: string | undefined;
-      const curated = DEFAULT_REWARD_ROADMAP.find(
+      const curated = curatedRoadmap.find(
         (r) => r.tier === tierDef.tier && !usedItemIds.has(r.itemId) && itemExists(r.categoryId, r.itemId)
       );
       if (curated) {
         categoryId = curated.categoryId;
         itemId = curated.itemId;
       } else {
-        const next = nextRoadmapItem(bp.categories, usedItemIds);
+        const next = nextRoadmapItem(bp.categories, fallbackExcludeIds);
         if (next) {
           categoryId = next.categoryId;
           itemId = next.itemId;
@@ -219,21 +320,24 @@ class Store {
 
       bp.rewardRoadmap.push({ tier: tierDef.tier, categoryId, itemId });
       usedItemIds.add(itemId);
+      fallbackExcludeIds.add(itemId);
       assignedTiers.add(tierDef.tier);
     }
     bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
   }
 
-  /** Re-applies the curated DEFAULT_REWARD_ROADMAP to any tier that hasn't
-   * been reached yet, so a deliberate design change (e.g. swapping which
-   * category a tier grants from) takes effect for tiers still ahead of you
-   * — without this, ensureRewardRoadmap's "never change an assigned entry"
-   * stability guarantee would keep the OLD curated pick forever, even after
-   * the curated table itself is edited. Tiers already reached always keep
-   * whatever they actually granted (never revoked/reshuffled), and a
-   * curated pick is skipped if its item is already owned some other way
-   * (an already-reached tier, or a legacy grant) so nothing gets promised
-   * twice. Idempotent. */
+  /** Re-applies the active curated roadmap (see activeCuratedRoadmap — the
+   * current season's scheduled table if one exists, otherwise the evergreen
+   * DEFAULT_REWARD_ROADMAP) to any tier that hasn't been reached yet, so a
+   * deliberate design change (e.g. swapping which category a tier grants
+   * from, or a season boundary swapping in a whole new table) takes effect
+   * for tiers still ahead of you — without this, ensureRewardRoadmap's
+   * "never change an assigned entry" stability guarantee would keep the OLD
+   * curated pick forever, even after the curated table itself changes.
+   * Tiers already reached always keep whatever they actually granted (never
+   * revoked/reshuffled), and a curated pick is skipped if its item is
+   * already owned some other way (an already-reached tier, or a legacy
+   * grant) so nothing gets promised twice. Idempotent. */
   private syncUpcomingTiersToCuratedRoadmap(): void {
     const bp = this.state.battlepass;
     const itemExists = (categoryId: string, itemId: string) =>
@@ -246,7 +350,7 @@ class Store {
       if (r.tier <= bp.currentTier) ownedItemIds.add(r.itemId);
     }
 
-    for (const curated of DEFAULT_REWARD_ROADMAP) {
+    for (const curated of this.activeCuratedRoadmap()) {
       if (curated.tier <= bp.currentTier) continue; // already reached — never touch
       if (ownedItemIds.has(curated.itemId)) continue; // already granted elsewhere — don't duplicate
       if (!itemExists(curated.categoryId, curated.itemId)) continue; // pool changed; leave existing assignment
@@ -488,7 +592,13 @@ class Store {
    * without requiring a page refresh. */
   checkRollovers(): void {
     const changed = this.processDueRollovers();
-    if (changed) this.emit();
+    if (changed) {
+      // Same reasoning as the constructor — a season boundary crossed
+      // while the app was open, so re-sync in case the new month has its
+      // own scheduled roadmap.
+      this.syncUpcomingTiersToCuratedRoadmap();
+      this.emit();
+    }
   }
 
   private processDueRollovers(): boolean {
@@ -966,8 +1076,10 @@ class Store {
 
   /** Adds a new reward item to the pool. Also extends the tier roadmap in
    * case an earlier tier had run out of eligible rewards and was left
-   * without one — this new item becomes available to fill it in. */
-  addRewardItem(categoryId: string, name: string, rarity: Rarity, kind: RewardKind, description = ""): void {
+   * without one — this new item becomes available to fill it in.
+   * `imageDataUrl` is only meaningful for Photocards — see
+   * setRewardItemImage for the hidden-until-owned guarantee. */
+  addRewardItem(categoryId: string, name: string, rarity: Rarity, kind: RewardKind, description = "", imageDataUrl?: string): void {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
     if (!cat || !name.trim()) return;
     cat.items.push({
@@ -975,10 +1087,24 @@ class Store {
       categoryId,
       name: name.trim(),
       description: description.trim() || undefined,
+      imageDataUrl,
       rarity,
       kind,
     });
     this.ensureRewardRoadmap();
+    this.emit();
+  }
+
+  /** Attaches (or clears, with `null`) the photo on an existing reward
+   * item — lets a Photocard's image be uploaded any time, independent of
+   * when the item itself was created (e.g. well before its tier is ever
+   * reached). Doesn't reveal anything on its own: the image only renders
+   * anywhere the caller has confirmed the item is actually owned — see
+   * rewardVisual's `revealed` option. */
+  setRewardItemImage(categoryId: string, itemId: string, imageDataUrl: string | null): void {
+    const item = this.state.battlepass.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId);
+    if (!item) return;
+    item.imageDataUrl = imageDataUrl ?? undefined;
     this.emit();
   }
 
@@ -1116,6 +1242,7 @@ class Store {
       this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
       this.ensureTrialChecklists();
       this.ensureDailyGames();
+      this.ensureBtsRewardPack();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();
@@ -1123,7 +1250,8 @@ class Store {
       this.dedupeDuplicateTierGrants();
       this.ensureActiveCosmeticsValid();
       this.renamePrimaryIfDefault();
-      this.processDueRollovers();
+      const rolledOver = this.processDueRollovers();
+      if (rolledOver) this.syncUpcomingTiersToCuratedRoadmap();
       this.emit();
       return { ok: true };
     } catch (err) {

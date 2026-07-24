@@ -5,7 +5,7 @@
 // a brand-new install.
 // ============================================================================
 
-import type { PointsConfig, RewardCategory, RewardRoadmapEntry, Tier, Settings } from "../types.js";
+import type { PointsConfig, Rarity, RewardCategory, RewardRoadmapEntry, Tier, Settings } from "../types.js";
 
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {
   1: 5, // Easy
@@ -166,3 +166,123 @@ export function defaultRewardCategories(): RewardCategory[] {
     },
   ];
 }
+
+// ============================================================================
+// BTS Season — a themed reward pack scheduled for August 2026. Everything
+// below is added to the pool ahead of time (see Store.ensureBtsRewardPack)
+// so it exists and can be inspected/edited immediately, but none of it is
+// reachable until the season actually rolls over to BTS_SEASON_MONTH_KEY —
+// see SEASONAL_REWARD_ROADMAPS and Store.activeCuratedRoadmap. Every
+// reference here is a nickname, character name, or an original color
+// palette — text and original artwork only, nothing reproduces official
+// photos, artwork, or lyrics.
+// ============================================================================
+
+/** The season this pack activates for. Store.syncUpcomingTiersToCuratedRoadmap
+ * only swaps in AUGUST_BTS_REWARD_ROADMAP once bp.currentMonthKey actually
+ * becomes this value (i.e. once the monthly rollover crosses into August
+ * 2026) — every tier not yet reached at that point, so July's roadmap is
+ * completely untouched until then. */
+export const BTS_SEASON_MONTH_KEY = "2026-08";
+
+interface SeedTitle {
+  id: string;
+  name: string;
+  flavorText: string;
+  rarity: Rarity;
+}
+
+/** Five go on August's roadmap (tiers 1, 3, 6, 8, 12); three are bonus pool
+ * items available to slot into a future tier from Settings. */
+export const BTS_NEW_TITLES: SeedTitle[] = [
+  { id: "title-bangtan-sonyeondan", name: "Bangtan Sonyeondan", rarity: "common", flavorText: "The literal meaning of BTS's full name: \"Bulletproof Boy Scouts\" — later paired with the Western-facing \"Beyond The Scene.\"" },
+  { id: "title-army", name: "ARMY", rarity: "common", flavorText: "Adorable Representative M.C. for Youth — the fandom's official name, adopted July 9, 2013." },
+  { id: "title-worldwide-handsome", name: "Worldwide Handsome", rarity: "uncommon", flavorText: "Jin's self-given nickname, fully embraced by fans ever since." },
+  { id: "title-golden-maknae", name: "Golden Maknae", rarity: "uncommon", flavorText: "Jungkook's title as the group's youngest member — sings, dances, raps, and always has a new cover out." },
+  { id: "title-god-of-destruction", name: "God of Destruction", rarity: "rare", flavorText: "RM's long-running nickname, earned by a legendary knack for accidentally breaking things." },
+  { id: "title-agust-d", name: "Agust D", rarity: "rare", flavorText: "Suga's producer/rapper alter ego and mixtape name." },
+  { id: "title-mochi", name: "Mochi", rarity: "uncommon", flavorText: "Jimin's nickname — soft, round cheeks, impossible not to love." },
+  { id: "title-sunshine", name: "Sunshine", rarity: "uncommon", flavorText: "J-Hope's nickname. He is, quite literally, ARMY's hope." },
+];
+
+interface SeedAvatar {
+  id: string;
+  name: string;
+  emoji: string;
+  flavorText: string;
+  rarity: Rarity;
+}
+
+/** BT21 (LINE FRIENDS x BTS) character stand-ins — one per member, plus VAN,
+ * the collective guardian character. Five go on August's roadmap (tiers 2,
+ * 4, 7, 10, 14); three are bonus pool items. */
+export const BTS_NEW_AVATARS: SeedAvatar[] = [
+  { id: "avatar-koya", name: "Koya", emoji: "\u{1F428}", rarity: "common", flavorText: "RM's BT21 alter ego — a sleepy, thoughtful koala who loves to read." },
+  { id: "avatar-rj", name: "RJ", emoji: "\u{1F999}", rarity: "common", flavorText: "Jin's BT21 alter ego — a fluffy alpaca who loves to cook." },
+  { id: "avatar-shooky", name: "Shooky", emoji: "\u{1F36A}", rarity: "uncommon", flavorText: "Suga's BT21 alter ego — a mischievous gingerbread cookie who really hates milk." },
+  { id: "avatar-tata", name: "Tata", emoji: "\u{1F47D}", rarity: "rare", flavorText: "V's BT21 alter ego — an artistic alien prince from planet BT." },
+  { id: "avatar-chimmy", name: "Chimmy", emoji: "\u{1F436}", rarity: "epic", flavorText: "Jimin's BT21 alter ego — an upbeat, dedicated little puppy." },
+  { id: "avatar-mang", name: "Mang", emoji: "\u{1F434}", rarity: "uncommon", flavorText: "J-Hope's BT21 alter ego — a high-energy dancer who never takes his mask off." },
+  { id: "avatar-cooky", name: "Cooky", emoji: "\u{1F430}", rarity: "epic", flavorText: "Jungkook's BT21 alter ego — a cute rabbit who's secretly built like a tank." },
+  { id: "avatar-van", name: "Van", emoji: "\u{1F916}", rarity: "legendary", flavorText: "BT21's guardian robot, created together by all seven members — some say it represents ARMY itself." },
+];
+
+/** The legendary finale of August's roadmap (tier 15). */
+export const BTS_NEW_THEME = {
+  id: "theme-i-purple-you",
+  name: "I Purple You",
+  rarity: "legendary" as Rarity,
+  flavorText: "Coined by V at BTS's 3rd Muster in 2016 — purple is the last color of the rainbow, so it means trust and love that lasts. It became BTS and ARMY's signature color.",
+};
+
+/** Placed at tier 11 of August's roadmap. */
+export const BTS_NEW_EFFECT = {
+  id: "effect-purple-ocean",
+  name: "Purple Ocean",
+  rarity: "rare" as Rarity,
+  flavorText: "A sea of glowing purple light, just like the ARMY Bombs raised at every concert.",
+};
+
+/** The one Photocard reserved for August, tier 13. Ships with no photo
+ * attached — Store.setRewardItemImage lets one be uploaded whenever you're
+ * ready, before or after the tier is reached; either way it stays hidden
+ * until then. Tier 13 isn't arbitrary: BTS debuted 6/13/2013, and FESTA (the
+ * annual anniversary celebration) falls on June 13 every year. */
+export const PHOTOCARD_SEED_ITEM = {
+  id: "photocard-surprise-01",
+  name: "Surprise Photocard",
+  rarity: "epic" as Rarity,
+  flavorText: "Reserved for Tier 13 of the August season — 6/13 for a reason. The photo stays hidden until you get there.",
+};
+
+/** August 2026's full 15-tier curated roadmap — same ascending-rarity shape
+ * as DEFAULT_REWARD_ROADMAP (4 common, 4 uncommon, 4 rare, 2 epic, 1
+ * legendary), just BTS-themed top to bottom. Tier 5 and 9 keep the ordinary
+ * Streak Freeze / Wildcard consumables so those mechanics don't skip a
+ * season. Tier 7 (avatar) is a small nod to the 7 members; tier 13
+ * (Photocard) to the 6/13 debut date. */
+export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
+  { tier: 1, categoryId: "cat-titles", itemId: "title-bangtan-sonyeondan" },
+  { tier: 2, categoryId: "cat-avatars", itemId: "avatar-koya" },
+  { tier: 3, categoryId: "cat-titles", itemId: "title-army" },
+  { tier: 4, categoryId: "cat-avatars", itemId: "avatar-rj" },
+  { tier: 5, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
+  { tier: 6, categoryId: "cat-titles", itemId: "title-worldwide-handsome" },
+  { tier: 7, categoryId: "cat-avatars", itemId: "avatar-shooky" },
+  { tier: 8, categoryId: "cat-titles", itemId: "title-golden-maknae" },
+  { tier: 9, categoryId: "cat-wildcard", itemId: "item-wildcard" },
+  { tier: 10, categoryId: "cat-avatars", itemId: "avatar-tata" },
+  { tier: 11, categoryId: "cat-effects", itemId: "effect-purple-ocean" },
+  { tier: 12, categoryId: "cat-titles", itemId: "title-god-of-destruction" },
+  { tier: 13, categoryId: "cat-photocards", itemId: PHOTOCARD_SEED_ITEM.id },
+  { tier: 14, categoryId: "cat-avatars", itemId: "avatar-chimmy" },
+  { tier: 15, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
+];
+
+/** Monthly-keyed curated roadmap overrides. Store.activeCuratedRoadmap looks
+ * up the current season's monthKey here first, falling back to the
+ * evergreen DEFAULT_REWARD_ROADMAP for every month that isn't specifically
+ * scheduled — so adding a season here never touches any other month. */
+export const SEASONAL_REWARD_ROADMAPS: Record<string, RewardRoadmapEntry[]> = {
+  [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_REWARD_ROADMAP,
+};

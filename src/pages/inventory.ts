@@ -153,13 +153,14 @@ function renderCategory(categoryId: string): HTMLElement | null {
       ownedItems.map((item) => {
         const equip = equipButtonFor(categoryId, item);
         return el("div", { class: "reward-chip" }, [
-          rewardVisual(categoryId, item.id, item.description),
+          rewardVisual(categoryId, item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: true }),
           el("div", { style: "flex:1;" }, [
             el("div", { class: "name" }, [item.name + (item.kind === "unlock" ? " ✓" : "")]),
             el("div", { class: `rarity-${item.rarity}` }, [
               rarityLabel(item.rarity),
               item.kind === "consumable" ? ` · consumable · have ${inventory[item.id] ?? 0}` : "",
             ]),
+            item.flavorText ? el("div", { class: "muted small", style: "margin-top:4px;" }, [item.flavorText]) : null,
             equip ? el("div", { style: "margin-top:6px;" }, [equip]) : null,
           ]),
         ]);

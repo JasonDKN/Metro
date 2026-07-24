@@ -22,17 +22,38 @@ export const THEME_SWATCHES: Record<string, [string, string]> = {
   "theme-neon": ["#ff2fd0", "#2ff3ff"],
   "theme-sakura": ["#ff9ec4", "#ffc9de"],
   "theme-aurora": ["#4ff0c0", "#9a6bff"],
+  "theme-i-purple-you": ["#a374ff", "#6c3fc9"],
 };
 
+/** Extra display info for rewardVisual, beyond what's needed for the plain
+ * text/emoji cases. Photocard images are opt-in and gated by `revealed` —
+ * see rewardVisual's Photocards branch — so a caller can never accidentally
+ * leak a photo attached ahead of time to a tier that isn't reached yet. */
+export interface RewardVisualOptions {
+  imageDataUrl?: string;
+  revealed?: boolean;
+}
+
 /** A little visual stand-in for a reward: a color swatch for themes (pulled
- * from THEME_SWATCHES), the stored emoji for avatars, and a fitting emoji
- * per other built-in category. Anything from a user-added category — where
- * there's no way to know what it should look like — gets a generic gift
- * icon. Keeps pages from being a wall of plain text. */
-export function rewardVisual(categoryId: string, itemId: string, description?: string): HTMLElement {
+ * from THEME_SWATCHES), the stored emoji for avatars, an actual photo
+ * thumbnail for an owned Photocard (a mystery card back otherwise, even if
+ * a photo has already been uploaded — see RewardVisualOptions), and a
+ * fitting emoji per other built-in category. Anything from a user-added
+ * category — where there's no way to know what it should look like — gets
+ * a generic gift icon. Keeps pages from being a wall of plain text. */
+export function rewardVisual(categoryId: string, itemId: string, description?: string, opts?: RewardVisualOptions): HTMLElement {
   if (categoryId === "cat-themes") {
     const [c1, c2] = THEME_SWATCHES[itemId] ?? THEME_SWATCHES["theme-default"];
     return el("span", { class: "reward-icon theme-swatch", style: `background: linear-gradient(135deg, ${c1}, ${c2});` });
+  }
+  if (categoryId === "cat-photocards") {
+    if (opts?.revealed && opts.imageDataUrl) {
+      return el("span", { class: "reward-icon photocard-thumb" }, [el("img", { src: opts.imageDataUrl, alt: "Photocard" })]);
+    }
+    // Not yet unlocked (or unlocked with no photo attached yet) — always a
+    // mystery card back, regardless of whether a photo already exists on
+    // the item, so nothing leaks before the tier is actually reached.
+    return el("span", { class: "reward-icon photocard-mystery" }, ["🎴"]);
   }
   const icon =
     categoryId === "cat-avatars"

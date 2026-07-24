@@ -11,6 +11,8 @@ import type { Rarity, RewardKind } from "../types.js";
 import { formatMonthLabel } from "../util/date.js";
 import { rarityLabel } from "../data/rewards.js";
 import { rewardVisual, renderProfileBanner } from "../ui/rewardVisuals.js";
+import { showToast } from "../ui/toast.js";
+import { fileToResizedDataUrl } from "../ui/image.js";
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 
@@ -51,7 +53,7 @@ function renderTierTrack(): HTMLElement {
           ]),
           item && category
             ? el("div", { class: "tier-reward" }, [
-                rewardVisual(category.id, item.id, item.description),
+                rewardVisual(category.id, item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: status === "reached" }),
                 el("div", {}, [
                   el("div", { class: "tier-reward-name" }, [item.name]),
                   el("div", { class: `rarity-${item.rarity} small` }, [
@@ -99,11 +101,12 @@ function renderUnlockedGallery(): HTMLElement {
       sorted.map((r) => {
         const item = bp.categories.find((c) => c.id === r.categoryId)?.items.find((i) => i.id === r.rewardId);
         return el("div", { class: "reward-chip" }, [
-          rewardVisual(r.categoryId, r.rewardId, item?.description),
+          rewardVisual(r.categoryId, r.rewardId, item?.description, { imageDataUrl: item?.imageDataUrl, revealed: true }),
           el("div", {}, [
             el("div", { class: "name" }, [r.name]),
             el("div", { class: `rarity-${r.rarity}` }, [rarityLabel(r.rarity)]),
             el("div", { class: "muted" }, [`${r.categoryName} · Tier ${r.tier}`]),
+            item?.flavorText ? el("div", { class: "muted small", style: "margin-top:4px;" }, [item.flavorText]) : null,
           ]),
         ]);
       })
@@ -131,10 +134,12 @@ function renderRewardPool(): HTMLElement {
         cat.items.map((item) => {
           const owned = item.kind === "consumable" || unlockedUnlockIds.has(item.id);
           return el("div", { class: "reward-chip", style: owned ? "" : "opacity:0.5;" }, [
-            rewardVisual(cat.id, item.id, item.description),
-            el("div", {}, [
+            rewardVisual(cat.id, item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: owned }),
+            el("div", { style: "flex:1;" }, [
               el("div", { class: "name" }, [item.name + (owned ? " ✓" : "")]),
               el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity), item.kind === "consumable" ? " · consumable" : ""]),
+              item.flavorText && owned ? el("div", { class: "muted small", style: "margin-top:2px;" }, [item.flavorText]) : null,
+              cat.id === "cat-photocards" ? renderPhotoUploadControl(cat.id, item.id, !!item.imageDataUrl) : null,
               el("button", { class: "small danger ghost", style: "margin-top:4px;", onclick: () => store.deleteRewardItem(cat.id, item.id) }, ["Remove"]),
             ]),
           ]);
@@ -147,7 +152,7 @@ function renderRewardPool(): HTMLElement {
   return el("div", { class: "card" }, [
     el("h2", {}, ["Reward Pool"]),
     el("p", { class: "muted small" }, [
-      "Each tier grants one specific reward from this pool, assigned in ascending rarity order — see the Tier Track above for exactly what's coming, no surprises. Add new categories or items any time; it never affects what you've already unlocked, and new items become available to fill any tier that's still waiting on one.",
+      "Each tier grants one specific reward from this pool, assigned in ascending rarity order — see the Tier Track above for exactly what's coming (Photocards are the one exception: the name shows, but the photo itself stays hidden until you actually unlock it). Add new categories or items any time; it never affects what you've already unlocked, and new items become available to fill any tier that's still waiting on one.",
     ]),
     ...categoryBlocks,
     renderAddCategoryForm(),
@@ -155,22 +160,75 @@ function renderRewardPool(): HTMLElement {
 }
 
 function renderAddItemForm(categoryId: string): HTMLElement {
-  const nameInput = el("input", { type: "text", placeholder: "Reward name" }) as HTMLInputElement;
+  const isPhotocards = categoryId === "cat-photocards";
+  const nameInput = el("input", { type: "text", placeholder: isPhotocards ? "Photocard name" : "Reward name" }) as HTMLInputElement;
   const raritySelect = el("select", {}, RARITIES.map((r, i) => el("option", { value: r, selected: i === 0 }, [rarityLabel(r)]))) as HTMLSelectElement;
   const kindSelect = el("select", {}, [
     el("option", { value: "unlock", selected: true }, ["One-time unlock"]),
     el("option", { value: "consumable" }, ["Consumable (stackable)"]),
   ]) as HTMLSelectElement;
+
+  let pendingImage: string | undefined;
+  const preview = el("img", { class: "photocard-upload-preview", style: "display:none;" }) as HTMLImageElement;
+  const fileInput = el("input", { type: "file", accept: "image/*" }) as HTMLInputElement;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      pendingImage = await fileToResizedDataUrl(file);
+      preview.src = pendingImage;
+      preview.style.display = "inline-block";
+    } catch {
+      showToast("Couldn't read that image", "Try a different file.");
+    }
+  });
+
   const submit = () => {
     if (!nameInput.value.trim()) return;
-    store.addRewardItem(categoryId, nameInput.value, raritySelect.value as Rarity, kindSelect.value as RewardKind);
+    const kind = isPhotocards ? "unlock" : (kindSelect.value as RewardKind);
+    store.addRewardItem(categoryId, nameInput.value, raritySelect.value as Rarity, kind, "", pendingImage);
     nameInput.value = "";
+    fileInput.value = "";
+    pendingImage = undefined;
+    preview.style.display = "none";
   };
+
   return el("div", { class: "inline-form", style: "margin-top: 6px;" }, [
     el("div", { class: "field" }, [el("label", {}, ["New reward"]), nameInput]),
     el("div", { class: "field", style: "flex: 0 0 150px;" }, [el("label", {}, ["Rarity"]), raritySelect]),
-    el("div", { class: "field", style: "flex: 0 0 180px;" }, [el("label", {}, ["Kind"]), kindSelect]),
+    isPhotocards ? null : el("div", { class: "field", style: "flex: 0 0 180px;" }, [el("label", {}, ["Kind"]), kindSelect]),
+    isPhotocards
+      ? el("div", { class: "field" }, [
+          el("label", {}, ["Photo (optional — you can add this later instead)"]),
+          fileInput,
+          preview,
+        ])
+      : null,
     el("button", { class: "small primary", onclick: submit }, ["Add to pool"]),
+  ]);
+}
+
+/** Lets a photo be attached (or replaced) on an existing Photocard item at
+ * any time — independent of when the item itself was created, so August's
+ * placeholder can get its real photo whenever it's ready. The image stays
+ * hidden everywhere else in the app until the item is actually owned (see
+ * rewardVisual). */
+function renderPhotoUploadControl(categoryId: string, itemId: string, hasImage: boolean): HTMLElement {
+  const fileInput = el("input", { type: "file", accept: "image/*", style: "font-size:11px; max-width:150px;" }) as HTMLInputElement;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(file);
+      store.setRewardItemImage(categoryId, itemId, dataUrl);
+      showToast("Photo saved", "It'll stay hidden until this tier is actually unlocked.");
+    } catch {
+      showToast("Couldn't read that image", "Try a different file.");
+    }
+  });
+  return el("div", { style: "margin-top:4px;" }, [
+    el("label", { class: "muted small", style: "display:block;" }, [hasImage ? "Replace photo" : "Add photo"]),
+    fileInput,
   ]);
 }
 
