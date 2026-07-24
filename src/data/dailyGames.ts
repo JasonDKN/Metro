@@ -107,3 +107,14 @@ export function defaultDailyGamesState(): DailyGamesState {
 export function findDailyGameEntry(state: DailyGamesState, gameId: string, date: string): DailyGameEntry | undefined {
   return state.entries.find((e) => e.gameId === gameId && e.date === date);
 }
+
+/** The best (highest points-earning) result ever recorded for a game, or
+ * null if it's never been logged. Points already normalize every scoring
+ * method (a raw score, a guess count, minutes-and-seconds, under-par) onto
+ * the same shared range, so "best" is simply the highest pointsAwarded
+ * across all of that game's entries — the same number already shown for
+ * "today", just maxed over history instead of looked up for one date. */
+export function bestDailyGameScore(state: DailyGamesState, gameId: string): number | null {
+  const points = state.entries.filter((e) => e.gameId === gameId).map((e) => e.pointsAwarded);
+  return points.length > 0 ? Math.max(...points) : null;
+}

@@ -2,9 +2,11 @@
 // Inventory page — the main hub for everything you've unlocked: themes,
 // avatars, titles, celebration effects, streak freeze tokens, wildcard
 // tokens, and any custom reward categories added from the Battlepass page.
-// This is where you equip a theme/avatar/title (replacing the old
-// "Appearance & Rank" section that used to live on Settings) and browse
-// what's still locked, with a heads-up on which tier unlocks it.
+// This is where you equip a theme/avatar/title/effect (replacing the old
+// "Appearance & Rank" section that used to live on Settings). Only rewards
+// you've actually unlocked are shown here — this is a trophy case, not a
+// browsable catalog of what's still locked (that's what the Battlepass
+// page's Tier Track is for).
 // ============================================================================
 
 import { store } from "../data/store.js";
@@ -16,11 +18,13 @@ import { DEFAULT_THEME_ID, DEFAULT_AVATAR_ID, BUILT_IN_THEMES, BUILT_IN_AVATARS 
 import { showToast } from "../ui/toast.js";
 import type { RewardItem } from "../types.js";
 
-/** Which tier (if any) grants this item, for a locked item's "Unlocks at
- * Tier N" hint. */
-function tierForItem(itemId: string): number | null {
-  const bp = store.getState().battlepass;
-  return bp.rewardRoadmap.find((r) => r.itemId === itemId)?.tier ?? null;
+/** Whether this specific reward item is actually owned — 'unlock' kind
+ * items use the live equip-eligibility check; consumables (Streak Freeze,
+ * Wildcard) use "has this ever been granted", since their current
+ * inventory count can legitimately drop to 0 from spending without that
+ * meaning you never earned it. */
+function isOwned(categoryId: string, item: RewardItem): boolean {
+  return item.kind === "consumable" ? store.hasBeenGranted(categoryId, item.id) : store.isRewardEarned(categoryId, item.id);
 }
 
 function equipButtonFor(categoryId: string, item: RewardItem): HTMLElement | null {
@@ -71,6 +75,21 @@ function equipButtonFor(categoryId: string, item: RewardItem): HTMLElement | nul
       [active ? "Equipped ✓" : "Equip"]
     );
   }
+  if (categoryId === "cat-effects") {
+    const active = s.activeEffectId === item.id;
+    return el(
+      "button",
+      {
+        class: `small${active ? "" : " primary"}`,
+        disabled: active,
+        onclick: () => {
+          store.setActiveEffect(item.id);
+          showToast("Celebration effect equipped", `${item.name} will now play when you clear your daily checklist.`);
+        },
+      },
+      [active ? "Equipped ✓" : "Equip"]
+    );
+  }
   return null;
 }
 
@@ -109,20 +128,21 @@ function renderBuiltInBaseline(): HTMLElement {
   ]);
 }
 
+/** Only unlocked rewards are shown — this page is a trophy case of what
+ * you've actually earned, not a catalog of everything still locked (that
+ * preview lives on the Battlepass page's Tier Track instead). A category
+ * with nothing unlocked yet in it is hidden entirely rather than shown
+ * empty. */
 function renderCategory(categoryId: string): HTMLElement | null {
   const bp = store.getState().battlepass;
+  const s = store.getState().settings;
   const cat = bp.categories.find((c) => c.id === categoryId);
   if (!cat || cat.items.length === 0) return null;
 
-  const earnedIds = new Set(store.getUnlockedItemIds(categoryId));
-  const inventory = bp.inventory;
+  const ownedItems = cat.items.filter((item) => isOwned(categoryId, item));
+  if (ownedItems.length === 0) return null;
 
-  const sorted = [...cat.items].sort((a, b) => {
-    const aEarned = a.kind === "consumable" || earnedIds.has(a.id);
-    const bEarned = b.kind === "consumable" || earnedIds.has(b.id);
-    if (aEarned !== bEarned) return aEarned ? -1 : 1;
-    return 0;
-  });
+  const inventory = bp.inventory;
 
   return el("div", { class: "card" }, [
     el("h2", {}, [cat.name]),
@@ -130,28 +150,36 @@ function renderCategory(categoryId: string): HTMLElement | null {
     el(
       "div",
       { class: "reward-grid" },
-      sorted.map((item) => {
-        const owned = item.kind === "consumable" ? true : earnedIds.has(item.id);
-        const locked = !owned;
-        const equip = owned ? equipButtonFor(categoryId, item) : null;
-        const unlockTier = locked ? tierForItem(item.id) : null;
-
-        return el("div", { class: `reward-chip${locked ? " locked-chip" : ""}` }, [
+      ownedItems.map((item) => {
+        const equip = equipButtonFor(categoryId, item);
+        return el("div", { class: "reward-chip" }, [
           rewardVisual(categoryId, item.id, item.description),
           el("div", { style: "flex:1;" }, [
-            el("div", { class: "name" }, [item.name + (item.kind === "unlock" && owned ? " ✓" : "")]),
+            el("div", { class: "name" }, [item.name + (item.kind === "unlock" ? " ✓" : "")]),
             el("div", { class: `rarity-${item.rarity}` }, [
               rarityLabel(item.rarity),
               item.kind === "consumable" ? ` · consumable · have ${inventory[item.id] ?? 0}` : "",
             ]),
-            locked
-              ? el("div", { class: "muted small" }, [unlockTier ? `🔒 Unlocks at Tier ${unlockTier}` : "🔒 Not yet on the roadmap"])
-              : null,
             equip ? el("div", { style: "margin-top:6px;" }, [equip]) : null,
           ]),
         ]);
       })
     ),
+    categoryId === "cat-effects" && s.activeEffectId
+      ? el("div", { style: "margin-top:14px;" }, [
+          el(
+            "button",
+            {
+              class: "small danger ghost",
+              onclick: () => {
+                store.setActiveEffect(null);
+                showToast("Reset to default effect", "Confetti Burst will play again.");
+              },
+            },
+            ["Reset to default (Confetti Burst)"]
+          ),
+        ])
+      : null,
   ]);
 }
 

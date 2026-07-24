@@ -78,6 +78,7 @@ export function defaultSettings(): Settings {
     activeThemeId: DEFAULT_THEME_ID,
     activeAvatarId: DEFAULT_AVATAR_ID,
     activeTitleId: null,
+    activeEffectId: null,
     pointsConfig: { ...DEFAULT_POINTS_CONFIG },
   };
 }

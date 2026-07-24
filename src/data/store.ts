@@ -38,7 +38,7 @@ import {
   defaultSettings,
   DEFAULT_TIERS,
 } from "./defaults.js";
-import { computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
+import { bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
 import { nextRoadmapItem } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
@@ -406,12 +406,22 @@ class Store {
       .map((u) => u.rewardId);
   }
 
-  /** Idempotent safety check: if your currently-equipped theme/avatar/title
-   * ever stops being valid (e.g. its item was deleted from the reward pool
-   * while equipped), fall back to the default/none rather than leaving a
-   * dangling selection. Since eligibility is now always checked live via
-   * isRewardEarned, this can't drift — it only ever needs to catch the
-   * pool-changed-out-from-under-you case. */
+  /** Whether a reward has ever been granted to you at all, regardless of
+   * kind. Broader than isRewardEarned (which only covers 'unlock' kind
+   * items, for the equip-eligibility check): this also covers consumables
+   * like Streak Freeze/Wildcard, where "owned" means "granted at least
+   * once" rather than "currently equipped" — a consumable stays visible in
+   * your Inventory even after your stock of it drops to 0 from spending. */
+  hasBeenGranted(categoryId: string, itemId: string): boolean {
+    return this.state.battlepass.unlocked.some((u) => u.categoryId === categoryId && u.rewardId === itemId);
+  }
+
+  /** Idempotent safety check: if your currently-equipped theme/avatar/
+   * title/effect ever stops being valid (e.g. its item was deleted from
+   * the reward pool while equipped), fall back to the default/none rather
+   * than leaving a dangling selection. Since eligibility is now always
+   * checked live via isRewardEarned, this can't drift — it only ever needs
+   * to catch the pool-changed-out-from-under-you case. */
   private ensureActiveCosmeticsValid(): void {
     const s = this.state.settings;
     if (s.activeThemeId !== DEFAULT_THEME_ID && !this.isRewardEarned("cat-themes", s.activeThemeId)) {
@@ -422,6 +432,9 @@ class Store {
     }
     if (s.activeTitleId && !this.isRewardEarned("cat-titles", s.activeTitleId)) {
       s.activeTitleId = null;
+    }
+    if (s.activeEffectId && !this.isRewardEarned("cat-effects", s.activeEffectId)) {
+      s.activeEffectId = null;
     }
   }
 
@@ -576,6 +589,15 @@ class Store {
   setActiveTitle(titleId: string | null): void {
     if (titleId && !this.isRewardEarned("cat-titles", titleId)) return;
     this.state.settings.activeTitleId = titleId;
+    this.emit();
+  }
+
+  /** null means "use the built-in default confetti burst" — always
+   * allowed, since that's the celebration everyone gets before earning
+   * anything. Any specific effect id must actually be earned first. */
+  setActiveEffect(effectId: string | null): void {
+    if (effectId && !this.isRewardEarned("cat-effects", effectId)) return;
+    this.state.settings.activeEffectId = effectId;
     this.emit();
   }
 
@@ -978,6 +1000,12 @@ class Store {
 
   getDailyGameEntry(gameId: string, date: string): DailyGameEntry | undefined {
     return findDailyGameEntry(this.state.dailyGames, gameId, date);
+  }
+
+  /** The best score ever recorded for a game, in points — or null if it's
+   * never been logged. See bestDailyGameScore for how "best" is defined. */
+  getBestDailyGameScore(gameId: string): number | null {
+    return bestDailyGameScore(this.state.dailyGames, gameId);
   }
 
   /** Records (or corrects) a daily puzzle's result for the given date and

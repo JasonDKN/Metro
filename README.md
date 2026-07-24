@@ -11,7 +11,7 @@ It's a static site (plain TypeScript compiled to JavaScript, no framework, no ba
 - **Checklists** (`checklists.html`) — create as many additional checklists as you want. They don't auto-reset by default (you can opt a checklist into daily reset too).
 - **Shortcuts** (`shortcuts.html`) — quick links to websites and local files/folders (both open as real clickable links). Programs are listed as copyable reference paths, since browsers can't launch installed desktop applications for security reasons.
 - **Battlepass** (`battlepass.html`) — season progress, tier track, your unlocked reward gallery, and reward-pool management (add new reward categories/items any time without losing existing progress).
-- **Inventory** (`inventory.html`) — the hub for everything you've unlocked: themes, avatars, titles, celebration effects, streak freeze tokens, wildcard tokens, and any custom reward categories you've added. Equip a theme/avatar/title directly from here; locked items show which tier unlocks them.
+- **Inventory** (`inventory.html`) — your trophy case: only shows themes, avatars, titles, celebration effects, streak freeze tokens, wildcard tokens, and any custom reward category items you've actually earned — nothing locked is listed. Equip a theme/avatar/title/celebration effect directly from here.
 - **Settings** (`settings.html`) — rename your assistant, tune points-per-difficulty and tier thresholds, and export/import a backup file. Appearance (themes/avatars/titles) moved to the Inventory page — see above.
 
 ## Weekday recurrence
@@ -40,7 +40,7 @@ This only applies to "never resets" checklists (including custom ones) — daily
 
 ## Daily Puzzles
 
-The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did.
+The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did. Each game also shows a "🏆 Personal Record" badge with the best points you've ever scored on it, once you've logged at least one result.
 
 Every game's score maps into the same 10–50 point range, calibrated so a great puzzle day feels roughly like clearing a Medium-to-Extreme task, and even a rough day still earns the floor amount:
 

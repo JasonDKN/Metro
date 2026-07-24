@@ -38,6 +38,7 @@ export function renderDailyGamesCard(): HTMLElement {
 
 function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
   const existing = store.getDailyGameEntry(config.id, date);
+  const best = store.getBestDailyGameScore(config.id);
   const controls = buildInputs(config, existing);
 
   const submit = () => {
@@ -48,15 +49,23 @@ function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
     }
     const result = store.recordDailyGameResult(config.id, date, input);
     if (!result) return;
-    showToast(`${config.name}: ${result.pointsAwarded} pts`, existing ? "Updated today's score." : "Recorded for today.", "success");
+    const isNewRecord = best === null || result.pointsAwarded > best;
+    showToast(
+      `${config.name}: ${result.pointsAwarded} pts`,
+      (existing ? "Updated today's score." : "Recorded for today.") + (isNewRecord ? " 🏆 New Personal Record!" : ""),
+      "success"
+    );
   };
 
   return el("div", { class: "task-item puzzle-row" }, [
-    el("div", { style: "display:flex; justify-content:space-between; align-items:center; width:100%;" }, [
+    el("div", { style: "display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:6px;" }, [
       el("strong", { style: "font-size:14px;" }, [config.name]),
-      existing
-        ? el("span", { class: "weekday-tag" }, [`Today: ${existing.pointsAwarded} pts`])
-        : el("span", { class: "muted small" }, ["Not recorded today"]),
+      el("div", { style: "display:flex; gap:6px; align-items:center;" }, [
+        best !== null ? el("span", { class: "weekday-tag record-tag" }, [`🏆 Personal Record: ${best} pts`]) : null,
+        existing
+          ? el("span", { class: "weekday-tag" }, [`Today: ${existing.pointsAwarded} pts`])
+          : el("span", { class: "muted small" }, ["Not recorded today"]),
+      ]),
     ]),
     el("div", { style: "display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; width:100%;" }, [
       controls.wrap,

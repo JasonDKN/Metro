@@ -219,6 +219,12 @@ export interface Settings {
   activeThemeId: string;
   activeAvatarId: string;
   activeTitleId: string | null;
+  /** Which Celebration Effect plays when you clear your daily checklist.
+   * null means the built-in default confetti burst — the same animation
+   * that always played before Celebration Effects existed as an earnable
+   * reward, so a fresh install (or anyone who hasn't equipped one) sees
+   * unchanged behavior. */
+  activeEffectId: string | null;
   pointsConfig: PointsConfig;
 }
 
