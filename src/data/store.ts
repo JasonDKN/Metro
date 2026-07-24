@@ -38,7 +38,7 @@ import {
   defaultSettings,
   DEFAULT_TIERS,
 } from "./defaults.js";
-import { bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
+import { bestDailyGameEntry, bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
 import { nextRoadmapItem } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
@@ -1006,6 +1006,16 @@ class Store {
    * never been logged. See bestDailyGameScore for how "best" is defined. */
   getBestDailyGameScore(gameId: string): number | null {
     return bestDailyGameScore(this.state.dailyGames, gameId);
+  }
+
+  /** The single best-performing entry ever recorded for a game, or null if
+   * it's never been logged. Use this (plus formatDailyGameRawValue) to show
+   * the actual value the user entered — a guess count, a raw score, a
+   * time, an under-par pair — rather than the points it earned. */
+  getBestDailyGameEntry(gameId: string): DailyGameEntry | null {
+    const config = this.state.dailyGames.configs.find((c) => c.id === gameId);
+    if (!config) return null;
+    return bestDailyGameEntry(this.state.dailyGames, config);
   }
 
   /** Records (or corrects) a daily puzzle's result for the given date and

@@ -10,6 +10,7 @@ import { store } from "../data/store.js";
 import { el } from "./dom.js";
 import { showToast } from "./toast.js";
 import { todayISO } from "../util/date.js";
+import { formatDailyGameRawValue } from "../data/dailyGames.js";
 import type { DailyGameConfig, DailyGameEntry } from "../types.js";
 
 type GameInput = { rawValue?: number; guesses?: number | null; actualUnderPar?: number; bestUnderPar?: number };
@@ -38,7 +39,7 @@ export function renderDailyGamesCard(): HTMLElement {
 
 function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
   const existing = store.getDailyGameEntry(config.id, date);
-  const best = store.getBestDailyGameScore(config.id);
+  const bestEntry = store.getBestDailyGameEntry(config.id);
   const controls = buildInputs(config, existing);
 
   const submit = () => {
@@ -49,7 +50,7 @@ function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
     }
     const result = store.recordDailyGameResult(config.id, date, input);
     if (!result) return;
-    const isNewRecord = best === null || result.pointsAwarded > best;
+    const isNewRecord = bestEntry === null || result.pointsAwarded > bestEntry.pointsAwarded;
     showToast(
       `${config.name}: ${result.pointsAwarded} pts`,
       (existing ? "Updated today's score." : "Recorded for today.") + (isNewRecord ? " 🏆 New Personal Record!" : ""),
@@ -61,7 +62,9 @@ function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
     el("div", { style: "display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:6px;" }, [
       el("strong", { style: "font-size:14px;" }, [config.name]),
       el("div", { style: "display:flex; gap:6px; align-items:center;" }, [
-        best !== null ? el("span", { class: "weekday-tag record-tag" }, [`🏆 Personal Record: ${best} pts`]) : null,
+        bestEntry !== null
+          ? el("span", { class: "weekday-tag record-tag" }, [`🏆 Personal Record: ${formatDailyGameRawValue(config, bestEntry)}`])
+          : null,
         existing
           ? el("span", { class: "weekday-tag" }, [`Today: ${existing.pointsAwarded} pts`])
           : el("span", { class: "muted small" }, ["Not recorded today"]),
