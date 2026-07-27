@@ -58,15 +58,17 @@ export function rewardVisual(categoryId: string, itemId: string, description?: s
   const icon =
     categoryId === "cat-avatars"
       ? description || "🧑"
-      : categoryId === "cat-titles"
-        ? "🎖️"
-        : categoryId === "cat-effects"
-          ? "✨"
-          : categoryId === "cat-streak-freeze"
-            ? "❄️"
-            : categoryId === "cat-wildcard"
-              ? "🃏"
-              : "🎁";
+      : categoryId === "cat-stickers"
+        ? description || "⭐"
+        : categoryId === "cat-titles"
+          ? "🎖️"
+          : categoryId === "cat-effects"
+            ? "✨"
+            : categoryId === "cat-streak-freeze"
+              ? "❄️"
+              : categoryId === "cat-wildcard"
+                ? "🃏"
+                : "🎁";
   return el("span", { class: "reward-icon" }, [icon]);
 }
 

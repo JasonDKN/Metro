@@ -17,6 +17,7 @@ import type {
   DailyGameConfig,
   DailyGameEntry,
   Difficulty,
+  PlacedSticker,
   PointsConfig,
   ResetSchedule,
   Rarity,
@@ -35,16 +36,19 @@ import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
 import {
   BTS_NEW_AVATARS,
   BTS_NEW_EFFECT,
+  BTS_NEW_PHOTOCARDS,
+  BTS_NEW_STICKERS,
   BTS_NEW_THEME,
   BTS_NEW_TITLES,
   DEFAULT_AVATAR_ID,
   DEFAULT_REWARD_ROADMAP,
   DEFAULT_THEME_ID,
+  defaultPhotocardAlbum,
   defaultRewardCategories,
   defaultSettings,
   DEFAULT_TIERS,
-  PHOTOCARD_SEED_ITEM,
   SEASONAL_REWARD_ROADMAPS,
+  SEASONAL_TIERS,
 } from "./defaults.js";
 import { bestDailyGameEntry, bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
@@ -115,6 +119,7 @@ function createDefaultState(): AppState {
       seasonHistory: {},
     },
     dailyGames: defaultDailyGamesState(),
+    photocardAlbum: defaultPhotocardAlbum(),
   };
 }
 
@@ -134,6 +139,7 @@ class Store {
     this.state = loaded ? migrate(loaded) : createDefaultState();
     this.ensureTrialChecklists();
     this.ensureDailyGames();
+    this.ensurePhotocardAlbum();
     this.ensureBtsRewardPack();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
@@ -192,9 +198,8 @@ class Store {
 
   /** Seeds the BTS Season reward pack into the pool ahead of time — new
    * titles/avatars/a theme/an effect appended to their existing built-in
-   * categories, plus a brand-new Photocards category with one placeholder
-   * "Surprise Photocard" reserved for tier 13. See defaults.ts for the item
-   * list and BTS_SEASON_MONTH_KEY.
+   * categories, plus brand-new Photocards and Stickers categories. See
+   * defaults.ts for the item lists and BTS_SEASON_MONTH_KEY.
    *
    * Adding these to the pool does NOT grant, promise, or reveal anything by
    * itself — only SEASONAL_REWARD_ROADMAPS decides which season's roadmap
@@ -239,21 +244,38 @@ class Store {
       bp.categories.push({
         id: "cat-photocards",
         name: "Photocards",
-        description: "Surprise photocards — the photo stays hidden until you actually reach the tier that grants it.",
+        description: "Surprise photocards — the photo stays hidden until you actually reach the tier that grants it. Browse unlocked ones in the Photocard Album.",
         builtIn: true,
         items: [],
       });
     }
     const photocards = bp.categories.find((c) => c.id === "cat-photocards")!;
-    if (!photocards.items.some((i) => i.id === PHOTOCARD_SEED_ITEM.id)) {
-      photocards.items.push({
-        id: PHOTOCARD_SEED_ITEM.id,
-        categoryId: "cat-photocards",
-        name: PHOTOCARD_SEED_ITEM.name,
-        flavorText: PHOTOCARD_SEED_ITEM.flavorText,
-        rarity: PHOTOCARD_SEED_ITEM.rarity,
-        kind: "unlock",
+    for (const p of BTS_NEW_PHOTOCARDS) {
+      if (photocards.items.some((i) => i.id === p.id)) continue;
+      photocards.items.push({ id: p.id, categoryId: "cat-photocards", name: p.name, flavorText: p.flavorText, rarity: p.rarity, kind: "unlock" });
+    }
+
+    if (!bp.categories.some((c) => c.id === "cat-stickers")) {
+      bp.categories.push({
+        id: "cat-stickers",
+        name: "Stickers",
+        description: "Decorations for the front of your Photocard Album.",
+        builtIn: true,
+        items: [],
       });
+    }
+    const stickers = bp.categories.find((c) => c.id === "cat-stickers")!;
+    for (const s of BTS_NEW_STICKERS) {
+      if (stickers.items.some((i) => i.id === s.id)) continue;
+      stickers.items.push({ id: s.id, categoryId: "cat-stickers", name: s.name, description: s.emoji, flavorText: s.flavorText, rarity: s.rarity, kind: "unlock" });
+    }
+  }
+
+  /** Backfills `photocardAlbum` for saves from before this feature shipped.
+   * Idempotent. */
+  private ensurePhotocardAlbum(): void {
+    if (!this.state.photocardAlbum) {
+      this.state.photocardAlbum = defaultPhotocardAlbum();
     }
   }
 
@@ -659,6 +681,27 @@ class Store {
       bp.currentMonthKey = monthKey;
       bp.seasonPoints = 0;
       bp.currentTier = 0;
+
+      // If the new season has its own scheduled tier ladder (see
+      // SEASONAL_TIERS), swap it in — snapshotting the user's current
+      // ladder into `baselineTiers` first (only if not already snapshotted,
+      // so hopping between two scheduled seasons back-to-back doesn't
+      // overwrite the ORIGINAL custom ladder with an intermediate seasonal
+      // one). If the new month has no scheduled ladder but a snapshot
+      // exists from a previous season, restore it so a custom Settings
+      // tier setup isn't lost. Otherwise leave `bp.tiers` untouched
+      // entirely — this preserves current behavior for all ordinary months.
+      const seasonalTiers = SEASONAL_TIERS[monthKey];
+      if (seasonalTiers) {
+        if (!bp.baselineTiers) {
+          bp.baselineTiers = bp.tiers.map((t) => ({ ...t }));
+        }
+        bp.tiers = seasonalTiers.map((t) => ({ ...t }));
+      } else if (bp.baselineTiers) {
+        bp.tiers = bp.baselineTiers.map((t) => ({ ...t }));
+        bp.baselineTiers = undefined;
+      }
+
       changed = true;
     }
 
@@ -1117,6 +1160,66 @@ class Store {
   }
 
   // ---------------------------------------------------------------------
+  // Photocard Album
+  // ---------------------------------------------------------------------
+
+  /** All Photocards actually owned, in pool order — this is the ONLY list
+   * the Photocard Album page should ever render from, since it's already
+   * filtered to owned items (a locked Photocard should never appear here,
+   * mirroring the same hidden-until-owned guarantee rewardVisual enforces
+   * for the image itself). */
+  getOwnedPhotocards(): RewardItem[] {
+    const cat = this.state.battlepass.categories.find((c) => c.id === "cat-photocards");
+    if (!cat) return [];
+    const ownedIds = new Set(this.getUnlockedItemIds("cat-photocards"));
+    return cat.items.filter((i) => ownedIds.has(i.id));
+  }
+
+  /** All Stickers actually owned, in pool order — feeds the Photocard
+   * Album's sticker tray (owned-but-not-yet-placed ones show up there). */
+  getOwnedStickers(): RewardItem[] {
+    const cat = this.state.battlepass.categories.find((c) => c.id === "cat-stickers");
+    if (!cat) return [];
+    const ownedIds = new Set(this.getUnlockedItemIds("cat-stickers"));
+    return cat.items.filter((i) => ownedIds.has(i.id));
+  }
+
+  /** Stickers currently placed on the Photocard Album's front cover, with
+   * their persisted position/rotation. */
+  getCoverStickers(): PlacedSticker[] {
+    return this.state.photocardAlbum.coverStickers;
+  }
+
+  /** Moves an owned-but-unplaced sticker onto the album cover at a random
+   * spot, so decorating the cover feels a bit like actually sticking
+   * something onto a binder rather than snapping to a grid. No-ops (and
+   * returns false) if the sticker isn't owned or is already placed.
+   * Position/rotation are picked once and then persisted, not re-rolled on
+   * every render. */
+  placeStickerOnCover(itemId: string): boolean {
+    if (!this.isRewardEarned("cat-stickers", itemId)) return false;
+    const album = this.state.photocardAlbum;
+    if (album.coverStickers.some((s) => s.itemId === itemId)) return false;
+    album.coverStickers.push({
+      itemId,
+      xPct: 10 + Math.random() * 80,
+      yPct: 10 + Math.random() * 80,
+      rotationDeg: -25 + Math.random() * 50,
+    });
+    this.emit();
+    return true;
+  }
+
+  /** Peels a sticker back off the cover — it stays owned and returns to the
+   * sticker tray, ready to be placed again (possibly somewhere new). */
+  removeStickerFromCover(itemId: string): void {
+    const album = this.state.photocardAlbum;
+    const before = album.coverStickers.length;
+    album.coverStickers = album.coverStickers.filter((s) => s.itemId !== itemId);
+    if (album.coverStickers.length !== before) this.emit();
+  }
+
+  // ---------------------------------------------------------------------
   // Daily Puzzles
   // ---------------------------------------------------------------------
 
@@ -1242,6 +1345,7 @@ class Store {
       this.state = migrate({ ...state, schemaVersion: state.schemaVersion ?? SCHEMA_VERSION });
       this.ensureTrialChecklists();
       this.ensureDailyGames();
+      this.ensurePhotocardAlbum();
       this.ensureBtsRewardPack();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();

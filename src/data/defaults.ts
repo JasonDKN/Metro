@@ -5,7 +5,7 @@
 // a brand-new install.
 // ============================================================================
 
-import type { PointsConfig, Rarity, RewardCategory, RewardRoadmapEntry, Tier, Settings } from "../types.js";
+import type { PhotocardAlbum, PointsConfig, Rarity, RewardCategory, RewardRoadmapEntry, Tier, Settings } from "../types.js";
 
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {
   1: 5, // Easy
@@ -227,7 +227,7 @@ export const BTS_NEW_AVATARS: SeedAvatar[] = [
   { id: "avatar-van", name: "Van", emoji: "\u{1F916}", rarity: "legendary", flavorText: "BT21's guardian robot, created together by all seven members — some say it represents ARMY itself." },
 ];
 
-/** The legendary finale of August's roadmap (tier 15). */
+/** The grand finale of August's roadmap (tier 30). */
 export const BTS_NEW_THEME = {
   id: "theme-i-purple-you",
   name: "I Purple You",
@@ -235,7 +235,7 @@ export const BTS_NEW_THEME = {
   flavorText: "Coined by V at BTS's 3rd Muster in 2016 — purple is the last color of the rainbow, so it means trust and love that lasts. It became BTS and ARMY's signature color.",
 };
 
-/** Placed at tier 11 of August's roadmap. */
+/** Placed at tier 21 of August's roadmap. */
 export const BTS_NEW_EFFECT = {
   id: "effect-purple-ocean",
   name: "Purple Ocean",
@@ -243,40 +243,122 @@ export const BTS_NEW_EFFECT = {
   flavorText: "A sea of glowing purple light, just like the ARMY Bombs raised at every concert.",
 };
 
-/** The one Photocard reserved for August, tier 13. Ships with no photo
- * attached — Store.setRewardItemImage lets one be uploaded whenever you're
- * ready, before or after the tier is reached; either way it stays hidden
- * until then. Tier 13 isn't arbitrary: BTS debuted 6/13/2013, and FESTA (the
- * annual anniversary celebration) falls on June 13 every year. */
-export const PHOTOCARD_SEED_ITEM = {
-  id: "photocard-surprise-01",
-  name: "Surprise Photocard",
-  rarity: "epic" as Rarity,
-  flavorText: "Reserved for Tier 13 of the August season — 6/13 for a reason. The photo stays hidden until you get there.",
+interface SeedPhotocard {
+  id: string;
+  name: string;
+  flavorText: string;
+  rarity: Rarity;
+}
+
+/** Five Photocard slots on August's roadmap now (up from just one) — all
+ * ship with no photo attached. Store.setRewardItemImage lets a photo be
+ * uploaded for any of them whenever you're ready, before or after its tier
+ * is reached; either way it stays hidden until then (see rewardVisual's
+ * `revealed` option). Tier 13 isn't arbitrary: BTS debuted 6/13/2013, and
+ * FESTA (the annual anniversary celebration) falls on June 13 every year. */
+export const BTS_NEW_PHOTOCARDS: SeedPhotocard[] = [
+  { id: "photocard-surprise-01", name: "Surprise Photocard", rarity: "uncommon", flavorText: "Reserved for Tier 13 of the August season — 6/13 for a reason. The photo stays hidden until you get there." },
+  { id: "photocard-surprise-02", name: "Surprise Photocard #2", rarity: "uncommon", flavorText: "Another slot, waiting for a photo — attach one any time from the Reward Pool." },
+  { id: "photocard-surprise-03", name: "Surprise Photocard #3", rarity: "rare", flavorText: "Another slot, waiting for a photo — attach one any time from the Reward Pool." },
+  { id: "photocard-surprise-04", name: "Surprise Photocard #4", rarity: "epic", flavorText: "Another slot, waiting for a photo — attach one any time from the Reward Pool." },
+  { id: "photocard-surprise-05", name: "Surprise Photocard #5", rarity: "legendary", flavorText: "The rarest pull of the album — save something special for this one." },
+];
+/** Kept for backwards compatibility with anything referencing the original
+ * single seed item by name. */
+export const PHOTOCARD_SEED_ITEM = BTS_NEW_PHOTOCARDS[0];
+
+interface SeedSticker {
+  id: string;
+  name: string;
+  emoji: string;
+  flavorText: string;
+  rarity: Rarity;
+}
+
+/** Decorations for the Photocard Album's front cover (see
+ * Store.placeStickerOnCover) — themed around BTS's 2026 comeback album
+ * *Arirang* (named for the traditional Korean folk song; Big Hit
+ * described it as capturing "BTS' identity as a group that began in
+ * Korea") plus general ARMY/BT21 iconography. Seven go on August's
+ * roadmap; "Hooligan" is a bonus pool item. */
+export const BTS_NEW_STICKERS: SeedSticker[] = [
+  { id: "sticker-purple-heart", name: "Purple Heart", emoji: "\u{1F49C}", rarity: "common", flavorText: "The universal ARMY symbol — \"I Purple You,\" always." },
+  { id: "sticker-swim", name: "Swim", emoji: "\u{1F3CA}", rarity: "common", flavorText: "\"Swim\" — Arirang's lead single, about moving forward through whatever the current throws at you." },
+  { id: "sticker-army-bomb", name: "ARMY Bomb", emoji: "\u{1F52E}", rarity: "common", flavorText: "A nod to the official lightstick — the whole crowd glowing as one." },
+  { id: "sticker-no-29", name: "No. 29", emoji: "\u{1F514}", rarity: "uncommon", flavorText: "Arirang's closing track — just a single chime of the Divine Bell of King Seongdeok." },
+  { id: "sticker-merry-go-round", name: "Merry Go Round", emoji: "\u{1F3A0}", rarity: "uncommon", flavorText: "Arirang's psychedelic rock detour." },
+  { id: "sticker-body-to-body", name: "Body to Body", emoji: "\u{1F941}", rarity: "rare", flavorText: "Samples the traditional Arirang folk melody itself — old song, new sound." },
+  { id: "sticker-bangtan-bomb", name: "Bangtan Bomb", emoji: "\u{1F3AC}", rarity: "epic", flavorText: "A nod to Bangtan Bomb, their long-running behind-the-scenes video series." },
+  { id: "sticker-hooligan", name: "Hooligan", emoji: "\u{1F608}", rarity: "rare", flavorText: "One of Arirang's tracks — a little mischief never hurt." },
+];
+
+/** August 2026's tier ladder — 30 tiers instead of the evergreen 15, with a
+ * gentler climb (delta(tier) = 30 + 10*tier, vs. the default's much steeper
+ * growth) so more rewards land, closer together, over the season. Swapped
+ * in via SEASONAL_TIERS at rollover; see Store — the previous ladder is
+ * snapshotted to bp.baselineTiers first and restored the moment a season
+ * without a scheduled ladder begins, so a custom Settings tier setup is
+ * never permanently lost. */
+export const AUGUST_BTS_TIERS: Tier[] = [
+  { tier: 1, pointsRequired: 40 }, { tier: 2, pointsRequired: 90 }, { tier: 3, pointsRequired: 150 },
+  { tier: 4, pointsRequired: 220 }, { tier: 5, pointsRequired: 300 }, { tier: 6, pointsRequired: 390 },
+  { tier: 7, pointsRequired: 490 }, { tier: 8, pointsRequired: 600 }, { tier: 9, pointsRequired: 720 },
+  { tier: 10, pointsRequired: 850 }, { tier: 11, pointsRequired: 990 }, { tier: 12, pointsRequired: 1140 },
+  { tier: 13, pointsRequired: 1300 }, { tier: 14, pointsRequired: 1470 }, { tier: 15, pointsRequired: 1650 },
+  { tier: 16, pointsRequired: 1840 }, { tier: 17, pointsRequired: 2040 }, { tier: 18, pointsRequired: 2250 },
+  { tier: 19, pointsRequired: 2470 }, { tier: 20, pointsRequired: 2700 }, { tier: 21, pointsRequired: 2940 },
+  { tier: 22, pointsRequired: 3190 }, { tier: 23, pointsRequired: 3450 }, { tier: 24, pointsRequired: 3720 },
+  { tier: 25, pointsRequired: 4000 }, { tier: 26, pointsRequired: 4290 }, { tier: 27, pointsRequired: 4590 },
+  { tier: 28, pointsRequired: 4900 }, { tier: 29, pointsRequired: 5220 }, { tier: 30, pointsRequired: 5550 },
+];
+
+/** Monthly-keyed tier-ladder overrides, mirroring SEASONAL_REWARD_ROADMAPS
+ * below. Store.processDueRollovers looks up the new season's monthKey here;
+ * a match swaps bp.tiers to it (snapshotting the outgoing ladder to
+ * bp.baselineTiers first), no match restores bp.baselineTiers if one was
+ * saved, or otherwise leaves bp.tiers untouched entirely. */
+export const SEASONAL_TIERS: Record<string, Tier[]> = {
+  [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_TIERS,
 };
 
-/** August 2026's full 15-tier curated roadmap — same ascending-rarity shape
- * as DEFAULT_REWARD_ROADMAP (4 common, 4 uncommon, 4 rare, 2 epic, 1
- * legendary), just BTS-themed top to bottom. Tier 5 and 9 keep the ordinary
- * Streak Freeze / Wildcard consumables so those mechanics don't skip a
- * season. Tier 7 (avatar) is a small nod to the 7 members; tier 13
- * (Photocard) to the 6/13 debut date. */
+/** August 2026's full 30-tier curated roadmap — ascending rarity top to
+ * bottom, same as the evergreen table, just BTS/Arirang-themed and with
+ * five Photocard slots and seven Sticker slots instead of one and zero.
+ * A few thematic placements: tier 7 (Sticker) nods to the 7 members; tier
+ * 13 (Photocard) to the 6/13 debut date; tier 30 closes on the "I Purple
+ * You" theme. Title Sunshine, Avatar Cooky, and Sticker Hooligan are left
+ * as bonus pool items rather than crowding the roadmap further. */
 export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 1, categoryId: "cat-titles", itemId: "title-bangtan-sonyeondan" },
-  { tier: 2, categoryId: "cat-avatars", itemId: "avatar-koya" },
-  { tier: 3, categoryId: "cat-titles", itemId: "title-army" },
+  { tier: 2, categoryId: "cat-titles", itemId: "title-army" },
+  { tier: 3, categoryId: "cat-avatars", itemId: "avatar-koya" },
   { tier: 4, categoryId: "cat-avatars", itemId: "avatar-rj" },
-  { tier: 5, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
-  { tier: 6, categoryId: "cat-titles", itemId: "title-worldwide-handsome" },
-  { tier: 7, categoryId: "cat-avatars", itemId: "avatar-shooky" },
-  { tier: 8, categoryId: "cat-titles", itemId: "title-golden-maknae" },
-  { tier: 9, categoryId: "cat-wildcard", itemId: "item-wildcard" },
-  { tier: 10, categoryId: "cat-avatars", itemId: "avatar-tata" },
-  { tier: 11, categoryId: "cat-effects", itemId: "effect-purple-ocean" },
-  { tier: 12, categoryId: "cat-titles", itemId: "title-god-of-destruction" },
-  { tier: 13, categoryId: "cat-photocards", itemId: PHOTOCARD_SEED_ITEM.id },
-  { tier: 14, categoryId: "cat-avatars", itemId: "avatar-chimmy" },
-  { tier: 15, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
+  { tier: 5, categoryId: "cat-stickers", itemId: "sticker-purple-heart" },
+  { tier: 6, categoryId: "cat-stickers", itemId: "sticker-swim" },
+  { tier: 7, categoryId: "cat-stickers", itemId: "sticker-army-bomb" },
+  { tier: 8, categoryId: "cat-titles", itemId: "title-worldwide-handsome" },
+  { tier: 9, categoryId: "cat-titles", itemId: "title-golden-maknae" },
+  { tier: 10, categoryId: "cat-titles", itemId: "title-mochi" },
+  { tier: 11, categoryId: "cat-avatars", itemId: "avatar-shooky" },
+  { tier: 12, categoryId: "cat-avatars", itemId: "avatar-mang" },
+  { tier: 13, categoryId: "cat-photocards", itemId: "photocard-surprise-01" },
+  { tier: 14, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
+  { tier: 15, categoryId: "cat-photocards", itemId: "photocard-surprise-02" },
+  { tier: 16, categoryId: "cat-stickers", itemId: "sticker-no-29" },
+  { tier: 17, categoryId: "cat-stickers", itemId: "sticker-merry-go-round" },
+  { tier: 18, categoryId: "cat-titles", itemId: "title-god-of-destruction" },
+  { tier: 19, categoryId: "cat-titles", itemId: "title-agust-d" },
+  { tier: 20, categoryId: "cat-avatars", itemId: "avatar-tata" },
+  { tier: 21, categoryId: "cat-effects", itemId: "effect-purple-ocean" },
+  { tier: 22, categoryId: "cat-wildcard", itemId: "item-wildcard" },
+  { tier: 23, categoryId: "cat-photocards", itemId: "photocard-surprise-03" },
+  { tier: 24, categoryId: "cat-stickers", itemId: "sticker-body-to-body" },
+  { tier: 25, categoryId: "cat-avatars", itemId: "avatar-chimmy" },
+  { tier: 26, categoryId: "cat-photocards", itemId: "photocard-surprise-04" },
+  { tier: 27, categoryId: "cat-stickers", itemId: "sticker-bangtan-bomb" },
+  { tier: 28, categoryId: "cat-avatars", itemId: "avatar-van" },
+  { tier: 29, categoryId: "cat-photocards", itemId: "photocard-surprise-05" },
+  { tier: 30, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
 ];
 
 /** Monthly-keyed curated roadmap overrides. Store.activeCuratedRoadmap looks
@@ -286,3 +368,7 @@ export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
 export const SEASONAL_REWARD_ROADMAPS: Record<string, RewardRoadmapEntry[]> = {
   [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_REWARD_ROADMAP,
 };
+
+export function defaultPhotocardAlbum(): PhotocardAlbum {
+  return { coverStickers: [] };
+}

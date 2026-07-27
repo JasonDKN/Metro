@@ -7,7 +7,7 @@ import { store } from "../data/store.js";
 import { el, clear, qs } from "./dom.js";
 import { defaultRewardCategories } from "../data/defaults.js";
 
-export type PageId = "daily" | "trials" | "checklists" | "shortcuts" | "battlepass" | "inventory" | "settings";
+export type PageId = "daily" | "trials" | "checklists" | "shortcuts" | "battlepass" | "inventory" | "photocardAlbum" | "settings";
 
 const NAV_ITEMS: { id: PageId; label: string; icon: string; href: string }[] = [
   { id: "daily", label: "Daily General", icon: "✓", href: "index.html" },
@@ -16,6 +16,7 @@ const NAV_ITEMS: { id: PageId; label: string; icon: string; href: string }[] = [
   { id: "shortcuts", label: "Shortcuts", icon: "⚡", href: "shortcuts.html" },
   { id: "battlepass", label: "Battlepass", icon: "★", href: "battlepass.html" },
   { id: "inventory", label: "Inventory", icon: "🎒", href: "inventory.html" },
+  { id: "photocardAlbum", label: "Photocard Album", icon: "📔", href: "photocard-album.html" },
   { id: "settings", label: "Settings", icon: "⚙", href: "settings.html" },
 ];
 

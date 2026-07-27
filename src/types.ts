@@ -210,6 +210,13 @@ export interface Battlepass {
   inventory: Record<string, number>;
   /** History of past seasons for reference, keyed by monthKey. */
   seasonHistory: Record<string, { pointsEarned: number; highestTier: number }>;
+  /** A snapshot of `tiers` taken right before a scheduled season (see
+   * SEASONAL_TIERS in defaults.ts) temporarily swaps in its own tier
+   * ladder — restored the moment a season without a scheduled ladder
+   * begins, so a custom tier setup made in Settings survives a themed
+   * season without being permanently overwritten. Absent/undefined outside
+   * of an active scheduled season. */
+  baselineTiers?: Tier[];
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +254,28 @@ export interface AppState {
   shortcuts: Shortcut[];
   battlepass: Battlepass;
   dailyGames: DailyGamesState;
+  photocardAlbum: PhotocardAlbum;
+}
+
+// ---------------------------------------------------------------------------
+// Photocard Album — a binder-style page for browsing unlocked Photocards
+// (cat-photocards rewards) and decorating the album's front cover with
+// unlocked Stickers (cat-stickers rewards). See src/pages/photocardAlbum.ts.
+// ---------------------------------------------------------------------------
+
+/** One Sticker placed on the album's front cover. Each owned sticker can
+ * only be placed once (they're one-time unlocks, not stackable) — position
+ * is randomized at placement time and then persisted so the cover doesn't
+ * rearrange itself between visits. */
+export interface PlacedSticker {
+  itemId: string;
+  xPct: number; // 0-100, left offset within the cover
+  yPct: number; // 0-100, top offset within the cover
+  rotationDeg: number;
+}
+
+export interface PhotocardAlbum {
+  coverStickers: PlacedSticker[];
 }
 
 // ---------------------------------------------------------------------------

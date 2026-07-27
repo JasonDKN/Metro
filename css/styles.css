@@ -538,9 +538,79 @@ details.manage-recurring summary:hover { color: var(--text); }
   margin-bottom: 18px;
 }
 
+/* ---- Photocard Album ------------------------------------------------------- */
+.album-pagination {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.album-pagination:last-child { margin-top: 16px; margin-bottom: 0; }
+.album-page { min-height: 320px; }
+
+.album-cover {
+  position: relative;
+  min-height: 320px;
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--accent-2);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent-2) 16%, var(--bg-elevated)), var(--bg-elevated));
+  overflow: hidden;
+}
+.album-cover-plate {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 20px; pointer-events: none;
+}
+.album-cover-title { font-size: 22px; font-weight: 800; }
+.album-cover-subtitle { margin-top: 6px; font-size: 12px; color: var(--text-muted); max-width: 320px; }
+.cover-sticker {
+  position: absolute;
+  border: none; background: transparent; padding: 0; margin: 0;
+  font-size: 34px; line-height: 1; cursor: pointer;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  transition: transform 0.15s ease;
+}
+.cover-sticker:hover { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35)) brightness(1.15); }
+
+.sticker-tray-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; }
+.sticker-tray-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 10px 6px;
+  font-size: 11px;
+  text-align: center;
+}
+.sticker-tray-emoji { font-size: 26px; }
+.sticker-tray-name { font-weight: 600; }
+
+.photocard-binder-grid { display: grid; gap: 14px; }
+.photocard-pocket {
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center;
+  min-height: 150px;
+  justify-content: center;
+}
+.photocard-pocket.filled {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.photocard-pocket.filled .reward-icon.photocard-thumb,
+.photocard-pocket.filled .reward-icon.photocard-mystery {
+  width: 72px; height: 72px;
+}
+.photocard-pocket-caption .name { font-weight: 700; font-size: 12px; }
+.photocard-pocket.empty {
+  border: 2px dashed var(--border);
+  background: color-mix(in srgb, var(--bg-card) 60%, transparent);
+}
+.photocard-pocket-placeholder { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+
 @media (max-width: 800px) {
   .app-shell { flex-direction: column; }
   .nav { width: 100%; height: auto; position: static; flex-direction: row; overflow-x: auto; }
   .nav-links { flex-direction: row; }
   .main { padding: 20px; }
+  .photocard-binder-grid { grid-template-columns: repeat(2, 1fr) !important; }
 }
