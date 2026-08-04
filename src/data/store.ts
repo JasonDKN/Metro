@@ -35,7 +35,7 @@ import { makeId } from "../util/id.js";
 import { currentMonthKey, previousDayISO, todayISO } from "../util/date.js";
 import {
   BTS_NEW_AVATARS,
-  BTS_NEW_EFFECT,
+  BTS_NEW_EFFECTS,
   BTS_NEW_PHOTOCARDS,
   BTS_NEW_STICKERS,
   BTS_NEW_THEME,
@@ -101,17 +101,29 @@ function createDefaultState(): AppState {
     history: {},
   };
 
+  // A brand-new install started DURING a scheduled season (e.g. someone's
+  // very first load happens to land in August) never goes through
+  // processDueRollovers' month-change branch — there's no "previous month"
+  // to roll over FROM. Without this, it would seed the evergreen 15-tier
+  // ladder while ensureRewardRoadmap/activeCuratedRoadmap already assume
+  // the season's full tier range, leaving high tiers with roadmap entries
+  // pointing at rewards no tier actually exists to grant. Seeding directly
+  // from SEASONAL_TIERS here keeps a fresh install consistent with what an
+  // actual rollover into that same month would have produced.
+  const startingMonthKey = currentMonthKey();
+  const startingTiers = SEASONAL_TIERS[startingMonthKey] ?? DEFAULT_TIERS;
+
   return {
     schemaVersion: SCHEMA_VERSION,
     settings: defaultSettings(),
     checklists: [primaryChecklist, ...makeTrialChecklists()],
     shortcuts: [],
     battlepass: {
-      currentMonthKey: currentMonthKey(),
+      currentMonthKey: startingMonthKey,
       seasonPoints: 0,
       lifetimePoints: 0,
       currentTier: 0,
-      tiers: DEFAULT_TIERS.map((t) => ({ ...t })),
+      tiers: startingTiers.map((t) => ({ ...t })),
       categories: defaultRewardCategories(),
       rewardRoadmap: [],
       unlocked: [],
@@ -236,8 +248,11 @@ class Store {
     }
 
     const effects = bp.categories.find((c) => c.id === "cat-effects");
-    if (effects && !effects.items.some((i) => i.id === BTS_NEW_EFFECT.id)) {
-      effects.items.push({ id: BTS_NEW_EFFECT.id, categoryId: "cat-effects", name: BTS_NEW_EFFECT.name, flavorText: BTS_NEW_EFFECT.flavorText, rarity: BTS_NEW_EFFECT.rarity, kind: "unlock" });
+    if (effects) {
+      for (const e of BTS_NEW_EFFECTS) {
+        if (effects.items.some((i) => i.id === e.id)) continue;
+        effects.items.push({ id: e.id, categoryId: "cat-effects", name: e.name, flavorText: e.flavorText, rarity: e.rarity, kind: "unlock" });
+      }
     }
 
     if (!bp.categories.some((c) => c.id === "cat-photocards")) {
@@ -445,7 +460,17 @@ class Store {
       if (tierDef.tier > bp.currentTier) continue;
       const roadmapItemId = roadmapItemIdByTier.get(tierDef.tier);
       if (!roadmapItemId) continue; // no roadmap assignment yet for this tier
-      const alreadyHasIt = bp.unlocked.some((u) => u.tier === tierDef.tier && u.rewardId === roadmapItemId);
+      // Scoped to THIS season (monthKey) as well as the tier number — tier
+      // numbers restart at 1 every month (see processDueRollovers), so tier 5
+      // reached in July and tier 5 reached in August are two entirely
+      // different grants, not the same one. Checking tier alone here used to
+      // treat a past season's grant as already covering this season's tier,
+      // which (combined with the same bug in dedupeDuplicateTierGrants right
+      // below) silently deleted prior months' earned rewards the moment you
+      // reached the same tier number again in a new season.
+      const alreadyHasIt = bp.unlocked.some(
+        (u) => u.tier === tierDef.tier && u.monthKey === bp.currentMonthKey && u.rewardId === roadmapItemId
+      );
       if (alreadyHasIt) continue;
       this.grantTierReward(tierDef.tier, []);
     }
@@ -473,27 +498,41 @@ class Store {
    * itself later changed). Dropped consumable duplicates still get
    * subtracted back out of inventory; dropped 'unlock' kind duplicates need
    * no further cleanup since they never touched inventory. No-op for any
-   * tier that only ever had one grant (the common case). */
+   * tier that only ever had one grant (the common case).
+   *
+   * IMPORTANT: grouped by (monthKey, tier) together, NOT tier alone. Tier
+   * numbers restart at 1 every season (see processDueRollovers), so reaching
+   * tier 5 in July and tier 5 again in August produces two legitimately
+   * separate grants, often for two completely different items. Grouping by
+   * tier only used to treat those as duplicates of each other and silently
+   * drop whichever one didn't match the CURRENT season's roadmap — meaning
+   * a reward earned in a past season could vanish the moment you reached
+   * the same tier number again in a new one. Only the current season's
+   * duplicates are compared against today's live roadmap; a past season's
+   * duplicates (a leftover from that historical bug) fall back to keeping
+   * the earliest grant, since that season's roadmap may no longer be
+   * around to check against. */
   private dedupeDuplicateTierGrants(): void {
     const bp = this.state.battlepass;
     const roadmapItemIdByTier = new Map(bp.rewardRoadmap.map((r) => [r.tier, r.itemId]));
-    const byTier = new Map<number, UnlockedReward[]>();
+    const byMonthAndTier = new Map<string, UnlockedReward[]>();
     for (const u of bp.unlocked) {
-      const list = byTier.get(u.tier);
+      const key = `${u.monthKey}::${u.tier}`;
+      const list = byMonthAndTier.get(key);
       if (list) list.push(u);
-      else byTier.set(u.tier, [u]);
+      else byMonthAndTier.set(key, [u]);
     }
 
     const kept: UnlockedReward[] = [];
     const extraCopiesByItemId = new Map<string, number>();
 
-    for (const entries of byTier.values()) {
+    for (const entries of byMonthAndTier.values()) {
       if (entries.length === 1) {
         kept.push(entries[0]);
         continue;
       }
       const sorted = [...entries].sort((a, b) => (a.unlockedAt < b.unlockedAt ? -1 : 1));
-      const roadmapItemId = roadmapItemIdByTier.get(entries[0].tier);
+      const roadmapItemId = entries[0].monthKey === bp.currentMonthKey ? roadmapItemIdByTier.get(entries[0].tier) : undefined;
       const winner = sorted.find((e) => e.rewardId === roadmapItemId) ?? sorted[0];
       kept.push(winner);
       for (const e of entries) {

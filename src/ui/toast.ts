@@ -57,6 +57,12 @@ export function celebrate(): void {
     case "effect-purple-ocean":
       purpleOcean(layer);
       break;
+    case "effect-divine-bell":
+      divineBellChime(layer);
+      break;
+    case "effect-bangtan-flash":
+      bangtanBombFlash(layer);
+      break;
     case "effect-confetti":
     default:
       confettiBurst(layer);
@@ -159,6 +165,47 @@ function purpleOcean(layer: HTMLElement, pieceCount = 55): void {
     });
     layer.appendChild(light);
     setTimeout(() => light.remove(), 4600);
+  }
+}
+
+/** A few slow, expanding golden rings from the center of the screen, plus a
+ * handful of gently rising gold particles — modeled on "No. 29," Arirang's
+ * closing track, which is just a single toll of the Divine Bell of King
+ * Seongdeok. Quieter and more solemn than the other effects on purpose.
+ * Part of the BTS Season pack. */
+function divineBellChime(layer: HTMLElement, ringCount = 3): void {
+  for (let i = 0; i < ringCount; i++) {
+    setTimeout(() => {
+      const ring = el("div", { class: "bell-ring" });
+      layer.appendChild(ring);
+      setTimeout(() => ring.remove(), 1800);
+    }, i * 450);
+  }
+  for (let i = 0; i < 22; i++) {
+    const particle = el("div", {
+      class: "bell-particle",
+      style: `left:${38 + Math.random() * 24}%; animation-delay:${Math.random() * 0.6}s; animation-duration:${
+        2.2 + Math.random() * 1.2
+      }s;`,
+    });
+    layer.appendChild(particle);
+    setTimeout(() => particle.remove(), 4200);
+  }
+}
+
+/** A rapid volley of camera-flash bursts at random spots on screen — a nod
+ * to Bangtan Bomb, BTS's long-running behind-the-scenes video series,
+ * always catching another candid moment. Part of the BTS Season pack. */
+function bangtanBombFlash(layer: HTMLElement, flashCount = 12): void {
+  for (let i = 0; i < flashCount; i++) {
+    setTimeout(() => {
+      const flash = el("div", {
+        class: "camera-flash",
+        style: `left:${Math.random() * 88}%; top:${Math.random() * 70}%;`,
+      });
+      layer.appendChild(flash);
+      setTimeout(() => flash.remove(), 260);
+    }, i * 130 + Math.random() * 90);
   }
 }
 

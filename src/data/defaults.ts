@@ -235,13 +235,24 @@ export const BTS_NEW_THEME = {
   flavorText: "Coined by V at BTS's 3rd Muster in 2016 — purple is the last color of the rainbow, so it means trust and love that lasts. It became BTS and ARMY's signature color.",
 };
 
-/** Placed at tier 21 of August's roadmap. */
-export const BTS_NEW_EFFECT = {
-  id: "effect-purple-ocean",
-  name: "Purple Ocean",
-  rarity: "rare" as Rarity,
-  flavorText: "A sea of glowing purple light, just like the ARMY Bombs raised at every concert.",
-};
+interface SeedEffect {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  flavorText: string;
+}
+
+/** Celebration effects (Settings/Inventory equippable, played when a daily
+ * checklist is fully cleared — see toast.ts's celebrate()). Three go on
+ * August's roadmap now (tiers 21, 31, 32) instead of just one. */
+export const BTS_NEW_EFFECTS: SeedEffect[] = [
+  { id: "effect-purple-ocean", name: "Purple Ocean", rarity: "rare", flavorText: "A sea of glowing purple light, just like the ARMY Bombs raised at every concert." },
+  { id: "effect-divine-bell", name: "Divine Bell Chime", rarity: "rare", flavorText: "A single resonant ring, straight out of \"No. 29\" — Arirang's closing track, just the Divine Bell of King Seongdeok tolling once." },
+  { id: "effect-bangtan-flash", name: "Bangtan Bomb Flash", rarity: "epic", flavorText: "A burst of camera flashes, like the crew catching another candid moment for a Bangtan Bomb." },
+];
+/** Kept for backwards compatibility with anything referencing the original
+ * single seed effect by name. */
+export const BTS_NEW_EFFECT = BTS_NEW_EFFECTS[0];
 
 interface SeedPhotocard {
   id: string;
@@ -292,13 +303,16 @@ export const BTS_NEW_STICKERS: SeedSticker[] = [
   { id: "sticker-hooligan", name: "Hooligan", emoji: "\u{1F608}", rarity: "rare", flavorText: "One of Arirang's tracks — a little mischief never hurt." },
 ];
 
-/** August 2026's tier ladder — 30 tiers instead of the evergreen 15, with a
+/** August 2026's tier ladder — 32 tiers instead of the evergreen 15, with a
  * gentler climb (delta(tier) = 30 + 10*tier, vs. the default's much steeper
- * growth) so more rewards land, closer together, over the season. Swapped
- * in via SEASONAL_TIERS at rollover; see Store — the previous ladder is
- * snapshotted to bp.baselineTiers first and restored the moment a season
- * without a scheduled ladder begins, so a custom Settings tier setup is
- * never permanently lost. */
+ * growth) so more rewards land, closer together, over the season. Tiers 31
+ * and 32 were appended (rather than reshuffling 1-30) purely to make room
+ * for two more celebration effects without touching any tier a returning
+ * player may have already reached. Swapped in via SEASONAL_TIERS at
+ * rollover; see Store — the previous ladder is snapshotted to
+ * bp.baselineTiers first and restored the moment a season without a
+ * scheduled ladder begins, so a custom Settings tier setup is never
+ * permanently lost. */
 export const AUGUST_BTS_TIERS: Tier[] = [
   { tier: 1, pointsRequired: 40 }, { tier: 2, pointsRequired: 90 }, { tier: 3, pointsRequired: 150 },
   { tier: 4, pointsRequired: 220 }, { tier: 5, pointsRequired: 300 }, { tier: 6, pointsRequired: 390 },
@@ -310,6 +324,7 @@ export const AUGUST_BTS_TIERS: Tier[] = [
   { tier: 22, pointsRequired: 3190 }, { tier: 23, pointsRequired: 3450 }, { tier: 24, pointsRequired: 3720 },
   { tier: 25, pointsRequired: 4000 }, { tier: 26, pointsRequired: 4290 }, { tier: 27, pointsRequired: 4590 },
   { tier: 28, pointsRequired: 4900 }, { tier: 29, pointsRequired: 5220 }, { tier: 30, pointsRequired: 5550 },
+  { tier: 31, pointsRequired: 5890 }, { tier: 32, pointsRequired: 6240 },
 ];
 
 /** Monthly-keyed tier-ladder overrides, mirroring SEASONAL_REWARD_ROADMAPS
@@ -321,13 +336,17 @@ export const SEASONAL_TIERS: Record<string, Tier[]> = {
   [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_TIERS,
 };
 
-/** August 2026's full 30-tier curated roadmap — ascending rarity top to
+/** August 2026's full 32-tier curated roadmap — ascending rarity top to
  * bottom, same as the evergreen table, just BTS/Arirang-themed and with
  * five Photocard slots and seven Sticker slots instead of one and zero.
  * A few thematic placements: tier 7 (Sticker) nods to the 7 members; tier
- * 13 (Photocard) to the 6/13 debut date; tier 30 closes on the "I Purple
- * You" theme. Title Sunshine, Avatar Cooky, and Sticker Hooligan are left
- * as bonus pool items rather than crowding the roadmap further. */
+ * 13 (Photocard) to the 6/13 debut date; tier 30 closes the original
+ * 30-tier board on the "I Purple You" theme. Tiers 31-32 are a later
+ * addition — two more celebration effects, appended past the original
+ * finale rather than swapped in for anything, so nothing already reached
+ * ever changes underneath a returning player. Title Sunshine, Avatar
+ * Cooky, and Sticker Hooligan are left as bonus pool items rather than
+ * crowding the roadmap further. */
 export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 1, categoryId: "cat-titles", itemId: "title-bangtan-sonyeondan" },
   { tier: 2, categoryId: "cat-titles", itemId: "title-army" },
@@ -359,6 +378,8 @@ export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 28, categoryId: "cat-avatars", itemId: "avatar-van" },
   { tier: 29, categoryId: "cat-photocards", itemId: "photocard-surprise-05" },
   { tier: 30, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
+  { tier: 31, categoryId: "cat-effects", itemId: "effect-divine-bell" },
+  { tier: 32, categoryId: "cat-effects", itemId: "effect-bangtan-flash" },
 ];
 
 /** Monthly-keyed curated roadmap overrides. Store.activeCuratedRoadmap looks
