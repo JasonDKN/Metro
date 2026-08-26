@@ -1,6 +1,6 @@
 // ============================================================================
 // Inventory page — the main hub for everything you've unlocked: themes,
-// avatars, titles, celebration effects, streak freeze tokens, wildcard
+// avatars, titles, celebration effects, any consumable tokens,
 // tokens, and any custom reward categories added from the Battlepass page.
 // This is where you equip a theme/avatar/title/effect (replacing the old
 // "Appearance & Rank" section that used to live on Settings). Only rewards
@@ -19,8 +19,8 @@ import { showToast } from "../ui/toast.js";
 import type { RewardItem } from "../types.js";
 
 /** Whether this specific reward item is actually owned — 'unlock' kind
- * items use the live equip-eligibility check; consumables (Streak Freeze,
- * Wildcard) use "has this ever been granted", since their current
+ * items use the live equip-eligibility check; consumables (only ever
+ * user-added now) use "has this ever been granted", since their current
  * inventory count can legitimately drop to 0 from spending without that
  * meaning you never earned it. */
 function isOwned(categoryId: string, item: RewardItem): boolean {

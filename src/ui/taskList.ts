@@ -26,7 +26,6 @@ import {
 } from "../data/schedule.js";
 
 export interface TaskListOptions {
-  allowWildcard?: boolean;
   /** Skip rendering the card's own name/heading — use when the page already
    * shows its own title above the card (e.g. the Daily Checklist page). */
   hideHeading?: boolean;
@@ -239,20 +238,6 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
       }
     }
 
-    if (!rowOpts.manageMode && opts.allowWildcard && !task.completed && store.wildcardCount() > 0) {
-      row.appendChild(
-        el(
-          "button",
-          {
-            class: "small",
-            title: "Use a Wildcard to swap this task",
-            onclick: () => openWildcardForm(task.id, task.text, task.difficulty),
-          },
-          ["🃏 Swap"]
-        )
-      );
-    }
-
     if (!rowOpts.manageMode && !isDaily && task.completed) {
       row.appendChild(
         el(
@@ -382,32 +367,6 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
           },
         },
         ["Save"]
-      ),
-      el("button", { class: "small ghost", onclick: () => paint() }, ["Cancel"]),
-    ]);
-    container.insertBefore(form, container.lastElementChild);
-  }
-
-  function openWildcardForm(taskId: string, currentText: string, currentDifficulty: Difficulty) {
-    const textInput = el("input", { type: "text", placeholder: "Replacement task" }) as HTMLInputElement;
-    const diffSelect = difficultySelect(currentDifficulty);
-    const form = el("div", { class: "inline-form card", style: "margin: 8px 0; border-color: var(--accent);" }, [
-      el("div", { style: "width:100%;" }, [`🃏 Swap out "${currentText}" for something else (1 Wildcard):`]),
-      el("div", { class: "field" }, [el("label", {}, ["New task"]), textInput]),
-      el("div", { class: "field" }, [el("label", {}, ["Difficulty"]), diffSelect]),
-      el(
-        "button",
-        {
-          class: "primary small",
-          onclick: () => {
-            const ok = store.useWildcard(checklist.id, taskId, textInput.value, Number(diffSelect.value) as Difficulty);
-            if (!ok) {
-              showToast("Couldn't use Wildcard", "Check you have one available and typed a new task.", "info");
-            }
-            paint();
-          },
-        },
-        ["Swap"]
       ),
       el("button", { class: "small ghost", onclick: () => paint() }, ["Cancel"]),
     ]);

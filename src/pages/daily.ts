@@ -31,29 +31,12 @@ function render(): void {
 
   const yLog = store.getYesterdayLog(primary.id);
   if (yLog && !yLog.fullyCompleted && !yLog.streakProtected && Object.keys(primary.history).length > 0) {
-    const freezeCount = store.streakFreezeCount();
     root.appendChild(
       el("div", { class: "warn-banner" }, [
         el("strong", {}, ["Yesterday: "]),
         yLog.missedTaskTexts.length > 0
           ? `you missed ${yLog.missedTaskTexts.length} task${yLog.missedTaskTexts.length === 1 ? "" : "s"} — ${yLog.missedTaskTexts.join(", ")}.`
           : "no tasks were on the list.",
-        freezeCount > 0
-          ? el("div", { style: "margin-top:8px;" }, [
-              el(
-                "button",
-                {
-                  class: "small primary",
-                  onclick: () => {
-                    const ok = store.useStreakFreeze(primary.id);
-                    showToast(ok ? "Streak Freeze used" : "Couldn't use Streak Freeze", ok ? "Yesterday is now protected." : "", ok ? "success" : "info");
-                    render();
-                  },
-                },
-                [`❄️ Use a Streak Freeze (${freezeCount} available)`]
-              ),
-            ])
-          : null,
       ])
     );
   }
@@ -66,7 +49,7 @@ function render(): void {
     ])
   );
 
-  root.appendChild(renderChecklistCard(primary, { allowWildcard: true, hideHeading: true }));
+  root.appendChild(renderChecklistCard(primary, { hideHeading: true }));
   root.appendChild(renderDailyGamesCard());
 
   const history = recentHistory(primary, 7);

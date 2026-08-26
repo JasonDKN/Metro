@@ -93,7 +93,7 @@ function renderTrialCard(checklist: Checklist): HTMLElement {
     ]);
   }
 
-  return el("div", {}, [header, renderChecklistCard(checklist, { allowWildcard: false, hideHeading: true })]);
+  return el("div", {}, [header, renderChecklistCard(checklist, { hideHeading: true })]);
 }
 
 function render(): void {

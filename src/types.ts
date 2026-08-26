@@ -92,7 +92,10 @@ export interface DailyLogEntry {
   pointsEarned: number;
   fullyCompleted: boolean;
   /** Set true when a Streak Freeze token was spent to protect this day even
-   * though it wasn't fully completed. */
+   * though it wasn't fully completed. Streak Freezes have since been retired
+   * from Metro, so nothing sets this any more — but days that were already
+   * rescued keep the flag, and computeStreak still honours it, because
+   * clearing it would retroactively break streaks the user genuinely had. */
   streakProtected?: boolean;
 }
 
@@ -206,7 +209,8 @@ export interface Battlepass {
    * randomly rolled. */
   rewardRoadmap: RewardRoadmapEntry[];
   unlocked: UnlockedReward[];
-  /** Consumable reward counts by reward id (e.g. streak freezes, wildcards). */
+  /** Consumable reward counts by reward id, for any consumable added to the
+   * reward pool (the built-in ones have been retired). */
   inventory: Record<string, number>;
   /** History of past seasons for reference, keyed by monthKey. */
   seasonHistory: Record<string, { pointsEarned: number; highestTier: number }>;

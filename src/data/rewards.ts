@@ -22,9 +22,9 @@ export function rarityRank(r: Rarity): number {
 /** Picks the next not-yet-assigned reward item, lowest rarity first, for a
  * tier that doesn't have a curated roadmap entry. `excludeItemIds` should
  * include every item id already assigned to another tier (so 'unlock' kind
- * rewards are never promised twice) — consumables (Streak Freeze, Wildcard)
- * are fine to exclude too here since each is only meant to anchor one tier
- * in the roadmap, even though they can still stack in your inventory. */
+ * rewards are never promised twice) — a consumable is fine to exclude too,
+ * since each is only meant to anchor one tier in the roadmap even though it
+ * can still stack in your inventory. */
 export function nextRoadmapItem(
   categories: RewardCategory[],
   excludeItemIds: Set<string>

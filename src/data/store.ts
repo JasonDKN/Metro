@@ -155,6 +155,7 @@ class Store {
     this.ensurePhotocardAlbum();
     this.ensureSeasonalTierLadder();
     this.ensureBtsRewardPack();
+    this.removeConsumableRewards();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
     this.removeBadgesCategory();
@@ -304,8 +305,9 @@ class Store {
     }
   }
 
-  /** Tops up the tier ladder when the current season's scheduled ladder (see
-   * SEASONAL_TIERS) has grown since the save last entered that season.
+  /** Re-syncs the tier ladder when the current season's scheduled ladder
+   * (see SEASONAL_TIERS) has changed length since the save last entered
+   * that season — in either direction.
    *
    * processDueRollovers only swaps bp.tiers at a month BOUNDARY, so a save
    * that rolled into a scheduled season back when its ladder had 30 tiers
@@ -313,15 +315,19 @@ class Store {
    * to 32. The Battlepass Tier Track renders straight from bp.tiers, so
    * those extra tiers — and the rewards curated for them — were invisible:
    * the roadmap promised rewards at tiers the user could never even see.
+   * The reverse happens too: retiring the Streak Freeze and Wildcard
+   * consumables freed two roadmap slots and brought August back down to 30
+   * tiers, which would otherwise leave a save showing two trailing tiers
+   * that no longer exist and can never grant anything.
    *
-   * Append-only, and only when the existing ladder is an exact prefix of the
-   * seasonal one. That prefix check is the safety catch: if the user has
-   * customized their thresholds in Settings (see updateTiers), the ladder no
-   * longer matches and we leave it completely alone rather than stomping
-   * their setup every page load. Tiers already present are never modified,
-   * so nothing already reached shifts underneath the user. Idempotent.
+   * Only ever acts when one ladder is an exact prefix of the other. That
+   * check is the safety catch: if the user has customized their thresholds
+   * in Settings (see updateTiers), neither is a prefix of the other and we
+   * leave the ladder completely alone rather than stomping their setup on
+   * every page load. Shared tiers are never modified, so nothing already
+   * reached shifts underneath the user. Idempotent.
    *
-   * Must run before ensureRewardRoadmap so any newly-appended tier gets its
+   * Must run before ensureRewardRoadmap so a newly-appended tier gets its
    * curated reward assigned in the same pass. */
   private ensureSeasonalTierLadder(): void {
     const bp = this.state.battlepass;
@@ -329,14 +335,178 @@ class Store {
     if (!seasonal) return;
 
     const current = [...bp.tiers].sort((a, b) => a.tier - b.tier);
-    if (current.length >= seasonal.length) return;
+    if (current.length === seasonal.length) return;
 
-    const isPrefix = current.every(
-      (t, i) => seasonal[i] && t.tier === seasonal[i].tier && t.pointsRequired === seasonal[i].pointsRequired
+    const shorter = current.length < seasonal.length ? current : seasonal;
+    const longer = current.length < seasonal.length ? seasonal : current;
+    const isPrefix = shorter.every(
+      (t, i) => longer[i] && t.tier === longer[i].tier && t.pointsRequired === longer[i].pointsRequired
     );
     if (!isPrefix) return;
 
     bp.tiers = seasonal.map((t) => ({ ...t }));
+
+    // Shrinking: drop roadmap entries for tiers that no longer exist, and
+    // don't leave currentTier pointing past the end of the ladder. Points
+    // are never touched — the climb the user already did still counts, it
+    // just tops out at the new final tier.
+    const validTiers = new Set(bp.tiers.map((t) => t.tier));
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => validTiers.has(r.tier));
+    const highestTier = bp.tiers.length === 0 ? 0 : Math.max(...bp.tiers.map((t) => t.tier));
+    if (bp.currentTier > highestTier) bp.currentTier = highestTier;
+  }
+
+  /** Retires the Streak Freeze and Wildcard consumables from an existing
+   * save, and re-deals the current season as though they had never been
+   * rewards at all.
+   *
+   * Both used to anchor a roadmap tier (August: Streak Freeze at 14,
+   * Wildcard at 22). Removing them shifts every later reward up one, which
+   * is fine for tiers still ahead of the user — syncUpcomingTiersToCuratedRoadmap
+   * already re-syncs those — but NOT for tiers already reached. Someone
+   * sitting at tier 25 earned a Wildcard at 22; under the new table tier 22
+   * grants what tier 23 used to, tier 23 grants what 24 used to, and so on,
+   * which means they're now owed two rewards they never received. Metro's
+   * usual rule is that a reached tier keeps exactly what it granted, so
+   * this is a deliberate, one-time exception: the shift has to reach
+   * backwards or the user is simply short two rewards forever.
+   *
+   * Past seasons are left completely alone. Their tier numbers are a
+   * historical record with no live roadmap to shift against, so re-dealing
+   * them would mean inventing rewards rather than correcting them.
+   *
+   * Days already rescued by a Streak Freeze keep their `streakProtected`
+   * flag (see DailyLogEntry) — the protection was legitimately earned at
+   * the time, and clearing it would retroactively break streaks the user
+   * actually has. Only the ability to earn or spend new tokens goes away.
+   *
+   * Gated on actually finding something to remove, so it runs once per
+   * affected save and is a no-op on every load after that (and on fresh
+   * installs, which never had the categories). */
+  private removeConsumableRewards(): void {
+    const bp = this.state.battlepass;
+    const removedCategoryIds = new Set(["cat-streak-freeze", "cat-wildcard"]);
+    const removedItemIds = new Set(["item-streak-freeze", "item-wildcard"]);
+    let found = false;
+
+    if (bp.categories.some((c) => removedCategoryIds.has(c.id))) {
+      bp.categories = bp.categories.filter((c) => !removedCategoryIds.has(c.id));
+      found = true;
+    }
+    for (const itemId of removedItemIds) {
+      if (bp.inventory[itemId] !== undefined) {
+        delete bp.inventory[itemId];
+        found = true;
+      }
+    }
+    const roadmapBefore = bp.rewardRoadmap.length;
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => !removedItemIds.has(r.itemId));
+    if (bp.rewardRoadmap.length !== roadmapBefore) found = true;
+
+    // Capture when each tier was originally earned BEFORE dropping anything,
+    // including the tiers whose grant was a token. Those tiers still happened
+    // — the user hit tier 22 on some particular day — so the replacement
+    // reward should carry that date rather than looking like it appeared the
+    // moment they loaded this version.
+    const originalTimestampByTier = new Map<number, string>();
+    for (const u of bp.unlocked) {
+      if (u.monthKey === bp.currentMonthKey) originalTimestampByTier.set(u.tier, u.unlockedAt);
+    }
+
+    // Only THIS season's token grants are dropped; past seasons keep theirs.
+    const unlockedBefore = bp.unlocked.length;
+    bp.unlocked = bp.unlocked.filter(
+      (u) => !(u.monthKey === bp.currentMonthKey && removedItemIds.has(u.rewardId))
+    );
+    if (bp.unlocked.length !== unlockedBefore) found = true;
+
+    if (!found) return;
+    this.redealCurrentSeason(originalTimestampByTier);
+  }
+
+  /** Rebuilds the current season's roadmap AND its recorded grants from the
+   * season's curated table, reached tiers included — the backwards half of
+   * removeConsumableRewards.
+   *
+   * Deliberately a wholesale rebuild rather than an incremental patch. The
+   * incremental machinery can't express this change: grantTierReward
+   * refuses to hand out an 'unlock' item the user already owns, so after a
+   * shift it would decline to re-grant at tier N an item currently recorded
+   * at tier N+1, and the tier would end up empty. Re-dealing the whole
+   * season sidesteps the ordering problem entirely — every reached tier
+   * gets exactly what the new table says, each item appears once, and the
+   * result doesn't depend on what order the corrections are applied in.
+   *
+   * Each tier keeps the timestamp of whatever was originally granted there,
+   * so the history reads as though the user earned the shifted reward at
+   * the moment they actually hit that tier — not as a pile of rewards that
+   * all appeared the day they loaded this version. */
+  private redealCurrentSeason(originalTimestampByTier: Map<number, string>): void {
+    const bp = this.state.battlepass;
+    const monthKey = bp.currentMonthKey;
+    const curated = this.activeCuratedRoadmap();
+    if (curated.length === 0) return;
+
+    const lookup = (categoryId: string, itemId: string) => {
+      const category = bp.categories.find((c) => c.id === categoryId);
+      const item = category?.items.find((i) => i.id === itemId);
+      return category && item ? { category, item } : null;
+    };
+
+    // 1. Re-point every tier at what the curated table now says, including
+    //    tiers already reached.
+    for (const entry of curated) {
+      if (!lookup(entry.categoryId, entry.itemId)) continue;
+      const idx = bp.rewardRoadmap.findIndex((r) => r.tier === entry.tier);
+      if (idx === -1) bp.rewardRoadmap.push({ ...entry });
+      else bp.rewardRoadmap[idx] = { ...entry };
+    }
+    const validTiers = new Set(bp.tiers.map((t) => t.tier));
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => validTiers.has(r.tier));
+    bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
+
+    // 2. Rebuild this season's grants from that roadmap. Timestamps come from
+    //    the caller, captured before any pruning — see removeConsumableRewards.
+    // Anything this season contributed to a consumable stack is withdrawn
+    // before the rebuild re-adds it, so counts can't drift upward.
+    for (const u of bp.unlocked) {
+      if (u.monthKey === monthKey && u.kind === "consumable") {
+        bp.inventory[u.rewardId] = Math.max(0, (bp.inventory[u.rewardId] ?? 0) - 1);
+      }
+    }
+    // An 'unlock' item earned in an EARLIER season is already owned for
+    // good; re-granting it here would double it up, so those tiers are
+    // skipped rather than duplicated (mirroring grantTierReward's guard).
+    const ownedInPastSeasons = new Set(
+      bp.unlocked.filter((u) => u.monthKey !== monthKey && u.kind === "unlock").map((u) => u.rewardId)
+    );
+    bp.unlocked = bp.unlocked.filter((u) => u.monthKey !== monthKey);
+
+    const now = new Date().toISOString();
+    for (const tierDef of [...bp.tiers].sort((a, b) => a.tier - b.tier)) {
+      if (tierDef.tier > bp.currentTier) continue;
+      const entry = bp.rewardRoadmap.find((r) => r.tier === tierDef.tier);
+      if (!entry) continue;
+      const found = lookup(entry.categoryId, entry.itemId);
+      if (!found) continue;
+      const { category, item } = found;
+      if (item.kind === "unlock" && ownedInPastSeasons.has(item.id)) continue;
+
+      bp.unlocked.push({
+        tier: tierDef.tier,
+        monthKey,
+        rewardId: item.id,
+        categoryId: item.categoryId,
+        name: item.name,
+        rarity: item.rarity,
+        kind: item.kind,
+        categoryName: category.name,
+        unlockedAt: originalTimestampByTier.get(tierDef.tier) ?? now,
+      });
+      if (item.kind === "consumable") {
+        bp.inventory[item.id] = (bp.inventory[item.id] ?? 0) + 1;
+      }
+    }
   }
 
   /** Which curated tier->reward table is "live" right now — the current
@@ -619,7 +789,7 @@ class Store {
   /** Whether a reward has ever been granted to you at all, regardless of
    * kind. Broader than isRewardEarned (which only covers 'unlock' kind
    * items, for the equip-eligibility check): this also covers consumables
-   * like Streak Freeze/Wildcard, where "owned" means "granted at least
+   * (a user-added consumable reward), where "owned" means "granted at least
    * once" rather than "currently equipped" — a consumable stays visible in
    * your Inventory even after your stock of it drops to 0 from spending. */
   hasBeenGranted(categoryId: string, itemId: string): boolean {
@@ -1137,47 +1307,6 @@ class Store {
   }
 
   // ---------------------------------------------------------------------
-  // Consumables: streak freeze & wildcard
-  // ---------------------------------------------------------------------
-
-  streakFreezeCount(): number {
-    return this.state.battlepass.inventory["item-streak-freeze"] ?? 0;
-  }
-
-  wildcardCount(): number {
-    return this.state.battlepass.inventory["item-wildcard"] ?? 0;
-  }
-
-  /** Spends one Streak Freeze to retroactively protect yesterday's entry on
-   * a daily checklist, even if it wasn't fully completed. */
-  useStreakFreeze(checklistId: string): boolean {
-    if (this.streakFreezeCount() <= 0) return false;
-    const cl = this.findChecklist(checklistId);
-    if (!cl) return false;
-    const yKey = previousDayISO(todayISO());
-    const entry = cl.history[yKey];
-    if (!entry || entry.fullyCompleted || entry.streakProtected) return false;
-    entry.streakProtected = true;
-    this.state.battlepass.inventory["item-streak-freeze"] -= 1;
-    this.emit();
-    return true;
-  }
-
-  /** Spends one Wildcard to swap out a not-yet-completed task's text and
-   * difficulty for something else, without any point/streak penalty. */
-  useWildcard(checklistId: string, taskId: string, newText: string, newDifficulty: Difficulty): boolean {
-    if (this.wildcardCount() <= 0) return false;
-    const cl = this.findChecklist(checklistId);
-    const task = cl?.tasks.find((t) => t.id === taskId);
-    if (!cl || !task || task.completed || !newText.trim()) return false;
-    task.text = newText.trim();
-    task.difficulty = newDifficulty;
-    this.state.battlepass.inventory["item-wildcard"] -= 1;
-    this.emit();
-    return true;
-  }
-
-  // ---------------------------------------------------------------------
   // Reward categories (user-extensible)
   // ---------------------------------------------------------------------
 
@@ -1481,6 +1610,7 @@ class Store {
       this.ensurePhotocardAlbum();
       this.ensureSeasonalTierLadder();
       this.ensureBtsRewardPack();
+      this.removeConsumableRewards();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
       this.removeBadgesCategory();

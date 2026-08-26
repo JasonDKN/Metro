@@ -48,16 +48,16 @@ export const DEFAULT_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 2, categoryId: "cat-avatars", itemId: "avatar-owl" },
   { tier: 3, categoryId: "cat-titles", itemId: "title-rookie" },
   { tier: 4, categoryId: "cat-effects", itemId: "effect-confetti" },
-  { tier: 5, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
-  { tier: 6, categoryId: "cat-effects", itemId: "effect-fireworks" },
-  { tier: 7, categoryId: "cat-avatars", itemId: "avatar-fox" },
-  { tier: 8, categoryId: "cat-titles", itemId: "title-taskmaster" },
-  { tier: 9, categoryId: "cat-wildcard", itemId: "item-wildcard" },
-  { tier: 10, categoryId: "cat-themes", itemId: "theme-neon" },
-  { tier: 11, categoryId: "cat-avatars", itemId: "avatar-star" },
-  { tier: 12, categoryId: "cat-titles", itemId: "title-pro" },
-  { tier: 13, categoryId: "cat-themes", itemId: "theme-sakura" },
-  { tier: 14, categoryId: "cat-avatars", itemId: "avatar-dragon" },
+  { tier: 5, categoryId: "cat-effects", itemId: "effect-fireworks" },
+  { tier: 6, categoryId: "cat-avatars", itemId: "avatar-fox" },
+  { tier: 7, categoryId: "cat-titles", itemId: "title-taskmaster" },
+  { tier: 8, categoryId: "cat-themes", itemId: "theme-neon" },
+  { tier: 9, categoryId: "cat-avatars", itemId: "avatar-star" },
+  { tier: 10, categoryId: "cat-titles", itemId: "title-pro" },
+  { tier: 11, categoryId: "cat-effects", itemId: "effect-starfall" },
+  { tier: 12, categoryId: "cat-themes", itemId: "theme-sakura" },
+  { tier: 13, categoryId: "cat-avatars", itemId: "avatar-dragon" },
+  { tier: 14, categoryId: "cat-titles", itemId: "title-legend" },
   { tier: 15, categoryId: "cat-themes", itemId: "theme-aurora" },
 ];
 
@@ -144,24 +144,6 @@ export function defaultRewardCategories(): RewardCategory[] {
         { id: "effect-starfall", categoryId: "cat-effects", name: "Starfall", rarity: "rare", kind: "unlock" },
         { id: "effect-aurora", categoryId: "cat-effects", name: "Aurora Wave", rarity: "epic", kind: "unlock" },
         { id: "effect-fanfare", categoryId: "cat-effects", name: "Metro Fanfare", rarity: "legendary", kind: "unlock" },
-      ],
-    },
-    {
-      id: "cat-streak-freeze",
-      name: "Streak Freezes",
-      description: "Protects your daily streak if you miss a day. Consumable.",
-      builtIn: true,
-      items: [
-        { id: "item-streak-freeze", categoryId: "cat-streak-freeze", name: "Streak Freeze Token", rarity: "uncommon", kind: "consumable" },
-      ],
-    },
-    {
-      id: "cat-wildcard",
-      name: "Wildcards",
-      description: "Swap one daily task for a bonus task without breaking your streak. Consumable.",
-      builtIn: true,
-      items: [
-        { id: "item-wildcard", categoryId: "cat-wildcard", name: "Wildcard Token", rarity: "rare", kind: "consumable" },
       ],
     },
   ];
@@ -303,12 +285,16 @@ export const BTS_NEW_STICKERS: SeedSticker[] = [
   { id: "sticker-hooligan", name: "Hooligan", emoji: "\u{1F608}", rarity: "rare", flavorText: "One of Arirang's tracks — a little mischief never hurt." },
 ];
 
-/** August 2026's tier ladder — 32 tiers instead of the evergreen 15, with a
+/** August 2026's tier ladder — 30 tiers instead of the evergreen 15, with a
  * gentler climb (delta(tier) = 30 + 10*tier, vs. the default's much steeper
- * growth) so more rewards land, closer together, over the season. Tiers 31
- * and 32 were appended (rather than reshuffling 1-30) purely to make room
- * for two more celebration effects without touching any tier a returning
- * player may have already reached. Swapped in via SEASONAL_TIERS at
+ * growth) so more rewards land, closer together, over the season.
+ *
+ * This briefly ran to 32 tiers, to make room for two extra celebration
+ * effects. Retiring the Streak Freeze and Wildcard consumables then freed
+ * two roadmap slots higher up, so those effects moved to tiers 29-30 and
+ * the ladder came back down to 30 — same thresholds for every tier that
+ * survived, so nothing already reached moved underneath anyone. Swapped in
+ * via SEASONAL_TIERS at
  * rollover; see Store — the previous ladder is snapshotted to
  * bp.baselineTiers first and restored the moment a season without a
  * scheduled ladder begins, so a custom Settings tier setup is never
@@ -324,7 +310,6 @@ export const AUGUST_BTS_TIERS: Tier[] = [
   { tier: 22, pointsRequired: 3190 }, { tier: 23, pointsRequired: 3450 }, { tier: 24, pointsRequired: 3720 },
   { tier: 25, pointsRequired: 4000 }, { tier: 26, pointsRequired: 4290 }, { tier: 27, pointsRequired: 4590 },
   { tier: 28, pointsRequired: 4900 }, { tier: 29, pointsRequired: 5220 }, { tier: 30, pointsRequired: 5550 },
-  { tier: 31, pointsRequired: 5890 }, { tier: 32, pointsRequired: 6240 },
 ];
 
 /** Monthly-keyed tier-ladder overrides, mirroring SEASONAL_REWARD_ROADMAPS
@@ -336,17 +321,21 @@ export const SEASONAL_TIERS: Record<string, Tier[]> = {
   [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_TIERS,
 };
 
-/** August 2026's full 32-tier curated roadmap — ascending rarity top to
+/** August 2026's full 30-tier curated roadmap — ascending rarity top to
  * bottom, same as the evergreen table, just BTS/Arirang-themed and with
  * five Photocard slots and seven Sticker slots instead of one and zero.
  * A few thematic placements: tier 7 (Sticker) nods to the 7 members; tier
- * 13 (Photocard) to the 6/13 debut date; tier 30 closes the original
- * 30-tier board on the "I Purple You" theme. Tiers 31-32 are a later
- * addition — two more celebration effects, appended past the original
- * finale rather than swapped in for anything, so nothing already reached
- * ever changes underneath a returning player. Title Sunshine, Avatar
- * Cooky, and Sticker Hooligan are left as bonus pool items rather than
- * crowding the roadmap further. */
+ * 13 (Photocard) to the 6/13 debut date; tier 28 lands the "I Purple You"
+ * theme, with the two newest celebration effects closing the season at 29
+ * and 30. Title Sunshine, Avatar Cooky, and Sticker Hooligan are left as
+ * bonus pool items rather than crowding the roadmap further.
+ *
+ * This table used to be 32 entries long, with a Streak Freeze at tier 14
+ * and a Wildcard at tier 22. Both consumables were retired from Metro
+ * entirely, so every entry after them shifted up one and the season now
+ * ends at tier 30 — see Store.removeConsumableRewards, which re-deals an
+ * in-progress season against this table so a player past those tiers ends
+ * up owning exactly what they'd own if the tokens had never existed. */
 export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 1, categoryId: "cat-titles", itemId: "title-bangtan-sonyeondan" },
   { tier: 2, categoryId: "cat-titles", itemId: "title-army" },
@@ -361,25 +350,23 @@ export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 11, categoryId: "cat-avatars", itemId: "avatar-shooky" },
   { tier: 12, categoryId: "cat-avatars", itemId: "avatar-mang" },
   { tier: 13, categoryId: "cat-photocards", itemId: "photocard-surprise-01" },
-  { tier: 14, categoryId: "cat-streak-freeze", itemId: "item-streak-freeze" },
-  { tier: 15, categoryId: "cat-photocards", itemId: "photocard-surprise-02" },
-  { tier: 16, categoryId: "cat-stickers", itemId: "sticker-no-29" },
-  { tier: 17, categoryId: "cat-stickers", itemId: "sticker-merry-go-round" },
-  { tier: 18, categoryId: "cat-titles", itemId: "title-god-of-destruction" },
-  { tier: 19, categoryId: "cat-titles", itemId: "title-agust-d" },
-  { tier: 20, categoryId: "cat-avatars", itemId: "avatar-tata" },
-  { tier: 21, categoryId: "cat-effects", itemId: "effect-purple-ocean" },
-  { tier: 22, categoryId: "cat-wildcard", itemId: "item-wildcard" },
-  { tier: 23, categoryId: "cat-photocards", itemId: "photocard-surprise-03" },
-  { tier: 24, categoryId: "cat-stickers", itemId: "sticker-body-to-body" },
-  { tier: 25, categoryId: "cat-avatars", itemId: "avatar-chimmy" },
-  { tier: 26, categoryId: "cat-photocards", itemId: "photocard-surprise-04" },
-  { tier: 27, categoryId: "cat-stickers", itemId: "sticker-bangtan-bomb" },
-  { tier: 28, categoryId: "cat-avatars", itemId: "avatar-van" },
-  { tier: 29, categoryId: "cat-photocards", itemId: "photocard-surprise-05" },
-  { tier: 30, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
-  { tier: 31, categoryId: "cat-effects", itemId: "effect-divine-bell" },
-  { tier: 32, categoryId: "cat-effects", itemId: "effect-bangtan-flash" },
+  { tier: 14, categoryId: "cat-photocards", itemId: "photocard-surprise-02" },
+  { tier: 15, categoryId: "cat-stickers", itemId: "sticker-no-29" },
+  { tier: 16, categoryId: "cat-stickers", itemId: "sticker-merry-go-round" },
+  { tier: 17, categoryId: "cat-titles", itemId: "title-god-of-destruction" },
+  { tier: 18, categoryId: "cat-titles", itemId: "title-agust-d" },
+  { tier: 19, categoryId: "cat-avatars", itemId: "avatar-tata" },
+  { tier: 20, categoryId: "cat-effects", itemId: "effect-purple-ocean" },
+  { tier: 21, categoryId: "cat-photocards", itemId: "photocard-surprise-03" },
+  { tier: 22, categoryId: "cat-stickers", itemId: "sticker-body-to-body" },
+  { tier: 23, categoryId: "cat-avatars", itemId: "avatar-chimmy" },
+  { tier: 24, categoryId: "cat-photocards", itemId: "photocard-surprise-04" },
+  { tier: 25, categoryId: "cat-stickers", itemId: "sticker-bangtan-bomb" },
+  { tier: 26, categoryId: "cat-avatars", itemId: "avatar-van" },
+  { tier: 27, categoryId: "cat-photocards", itemId: "photocard-surprise-05" },
+  { tier: 28, categoryId: "cat-themes", itemId: BTS_NEW_THEME.id },
+  { tier: 29, categoryId: "cat-effects", itemId: "effect-divine-bell" },
+  { tier: 30, categoryId: "cat-effects", itemId: "effect-bangtan-flash" },
 ];
 
 /** Monthly-keyed curated roadmap overrides. Store.activeCuratedRoadmap looks

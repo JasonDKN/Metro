@@ -75,7 +75,7 @@ function render(): void {
       ]),
     ]);
     wrapper.appendChild(controls);
-    wrapper.appendChild(renderChecklistCard(checklist, { allowWildcard: false }));
+    wrapper.appendChild(renderChecklistCard(checklist));
     root.appendChild(wrapper);
   }
 }

@@ -78,29 +78,20 @@ function renderTierTrack(): HTMLElement {
   ]);
 }
 
-function renderConsumablesSummary(): HTMLElement {
-  return el("div", { class: "card" }, [
-    el("h2", {}, ["Consumables"]),
-    el("div", { class: "stat-row" }, [
-      el("div", { class: "stat-tile" }, [el("div", { class: "value" }, [`❄️ ${store.streakFreezeCount()}`]), el("div", { class: "label" }, ["Streak Freezes"])]),
-      el("div", { class: "stat-tile" }, [el("div", { class: "value" }, [`🃏 ${store.wildcardCount()}`]), el("div", { class: "label" }, ["Wildcards"])]),
-    ]),
-    el("p", { class: "muted small", style: "margin-top:10px;" }, [
-      "Use Streak Freezes and Wildcards from the Daily Checklist page. See everything you've earned — and equip themes, avatars, and titles — on the ",
-      el("a", { href: "inventory.html" }, ["Inventory"]),
-      " page.",
-    ]),
-  ]);
-}
-
 function renderUnlockedGallery(): HTMLElement {
   const bp = store.getState().battlepass;
   if (bp.unlocked.length === 0) {
     return el("div", { class: "card" }, [el("h2", {}, ["Unlocked Rewards"]), el("div", { class: "empty-state" }, ["Complete tasks to earn your first reward!"])]);
   }
+  const inventoryNote = el("p", { class: "muted small" }, [
+    "Everything you've earned lives on the ",
+    el("a", { href: "inventory.html" }, ["Inventory"]),
+    " page, where themes, avatars, titles, and celebration effects can be equipped.",
+  ]);
   const sorted = [...bp.unlocked].sort((a, b) => (a.unlockedAt < b.unlockedAt ? 1 : -1));
   return el("div", { class: "card" }, [
     el("h2", {}, ["Unlocked Rewards"]),
+    inventoryNote,
     el(
       "div",
       { class: "reward-grid" },
@@ -291,7 +282,6 @@ function render(): void {
   root.appendChild(renderProfileBanner());
   root.appendChild(renderHeader());
   root.appendChild(renderTierTrack());
-  root.appendChild(renderConsumablesSummary());
   root.appendChild(renderUnlockedGallery());
   root.appendChild(renderRewardPool());
   const history = renderSeasonHistory();
