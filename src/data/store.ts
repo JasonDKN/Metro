@@ -355,6 +355,10 @@ class Store {
     const seasonal = SEASONAL_TIERS[bp.currentMonthKey];
     if (!seasonal) return;
 
+    // A ladder the user edited in Settings is theirs, not a stale copy of the
+    // season's — re-syncing it would delete tiers they deliberately added.
+    if (bp.tiersCustomized) return;
+
     const current = [...bp.tiers].sort((a, b) => a.tier - b.tier);
     if (current.length === seasonal.length) return;
 
@@ -625,6 +629,8 @@ class Store {
 
     for (const curated of this.activeCuratedRoadmap()) {
       if (curated.tier <= bp.currentTier) continue; // already reached — never touch
+      // A reward the user pinned to this tier outranks the curated table.
+      if (bp.rewardRoadmap.find((r) => r.tier === curated.tier)?.manual) continue;
       if (ownedItemIds.has(curated.itemId)) continue; // already granted elsewhere — don't duplicate
       if (!itemExists(curated.categoryId, curated.itemId)) continue; // pool changed; leave existing assignment
 
@@ -972,6 +978,9 @@ class Store {
           bp.baselineTiers = bp.tiers.map((t) => ({ ...t }));
         }
         bp.tiers = seasonalTiers.map((t) => ({ ...t }));
+        // The ladder now in place is the season's, not the user's edit, so
+        // it's free to re-sync again until they edit this one too.
+        bp.tiersCustomized = undefined;
       } else if (bp.baselineTiers) {
         bp.tiers = bp.baselineTiers.map((t) => ({ ...t }));
         bp.baselineTiers = undefined;
@@ -1037,6 +1046,9 @@ class Store {
   updateTiers(tiers: Tier[]): void {
     const sorted = [...tiers].sort((a, b) => a.tier - b.tier);
     this.state.battlepass.tiers = sorted;
+    // Marks the ladder as the user's own, so ensureSeasonalTierLadder stops
+    // treating it as a stale copy of the season's and resetting it.
+    this.state.battlepass.tiersCustomized = true;
     this.ensureRewardRoadmap();
     this.emit();
   }
@@ -1392,20 +1404,112 @@ class Store {
    * without one — this new item becomes available to fill it in.
    * `imageDataUrl` is only meaningful for Photocards — see
    * setRewardItemImage for the hidden-until-owned guarantee. */
-  addRewardItem(categoryId: string, name: string, rarity: Rarity, kind: RewardKind, description = "", imageDataUrl?: string): void {
+  /** Adds an item to a reward category and returns it, so a caller that
+   * just created a reward can immediately pin it to a tier (see
+   * setTierReward) without having to go hunting for it by name.
+   *
+   * `extras` carries the fields only some categories use — a Photocard's
+   * photo, a Theme's colour pair, a Celebration Effect's animation choice —
+   * rather than growing the positional argument list once per category. */
+  addRewardItem(
+    categoryId: string,
+    name: string,
+    rarity: Rarity,
+    kind: RewardKind,
+    description = "",
+    extras: { imageDataUrl?: string; colors?: [string, string]; effectAnimation?: string } = {}
+  ): RewardItem | null {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
-    if (!cat || !name.trim()) return;
-    cat.items.push({
+    if (!cat || !name.trim()) return null;
+    const item: RewardItem = {
       id: makeId("reward"),
       categoryId,
       name: name.trim(),
       description: description.trim() || undefined,
-      imageDataUrl,
+      imageDataUrl: extras.imageDataUrl,
+      colors: extras.colors,
+      effectAnimation: extras.effectAnimation,
       rarity,
       kind,
-    });
+    };
+    cat.items.push(item);
     this.ensureRewardRoadmap();
     this.emit();
+    return item;
+  }
+
+  /** Pins a specific reward to a specific tier, overriding whatever the
+   * automatic assignment picked.
+   *
+   * Refuses in three cases, each returning a reason the caller can show:
+   *  - the tier has already been reached, since changing it would rewrite
+   *    what the user was actually granted;
+   *  - the item is already promised to a different tier, or already owned,
+   *    which would mean earning the same one-time unlock twice;
+   *  - the tier or item simply doesn't exist.
+   *
+   * The entry is flagged `manual` so a curated seasonal table can't quietly
+   * overwrite it on the next load. */
+  setTierReward(tier: number, categoryId: string, itemId: string): { ok: true } | { ok: false; error: string } {
+    const bp = this.state.battlepass;
+    if (!bp.tiers.some((t) => t.tier === tier)) return { ok: false, error: "That tier doesn't exist." };
+    if (tier <= bp.currentTier) {
+      return { ok: false, error: "You've already reached that tier — its reward is locked in." };
+    }
+    const category = bp.categories.find((c) => c.id === categoryId);
+    const item = category?.items.find((i) => i.id === itemId);
+    if (!category || !item) return { ok: false, error: "That reward isn't in the pool any more." };
+
+    if (item.kind === "unlock") {
+      if (bp.unlocked.some((u) => u.rewardId === itemId)) {
+        return { ok: false, error: `You already own ${item.name}.` };
+      }
+      const clash = bp.rewardRoadmap.find((r) => r.itemId === itemId && r.tier !== tier);
+      if (clash) {
+        return { ok: false, error: `${item.name} is already promised at tier ${clash.tier}.` };
+      }
+    }
+
+    const idx = bp.rewardRoadmap.findIndex((r) => r.tier === tier);
+    const entry: RewardRoadmapEntry = { tier, categoryId, itemId, manual: true };
+    if (idx === -1) bp.rewardRoadmap.push(entry);
+    else bp.rewardRoadmap[idx] = entry;
+    bp.rewardRoadmap.sort((a, b) => a.tier - b.tier);
+    this.emit();
+    return { ok: true };
+  }
+
+  /** Hands a tier back to automatic assignment: drops the pinned entry and
+   * lets ensureRewardRoadmap refill it (from the season's curated table if
+   * one covers that tier, otherwise the next lowest-rarity unused item).
+   * A tier already reached is left alone. */
+  clearTierReward(tier: number): void {
+    const bp = this.state.battlepass;
+    if (tier <= bp.currentTier) return;
+    const before = bp.rewardRoadmap.length;
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => r.tier !== tier);
+    if (bp.rewardRoadmap.length === before) return;
+    this.ensureRewardRoadmap();
+    this.syncUpcomingTiersToCuratedRoadmap();
+    this.emit();
+  }
+
+  /** Appends a tier at `pointsRequired` and returns its number, so the
+   * caller can immediately assign it a reward. Kept separate from
+   * updateTiers (which rewrites the whole ladder from the editor's working
+   * copy) because adding one tier shouldn't require restating every other. */
+  addTier(pointsRequired: number): number | null {
+    if (!Number.isFinite(pointsRequired) || pointsRequired < 0) return null;
+    const bp = this.state.battlepass;
+    const tiers = [...bp.tiers, { tier: 0, pointsRequired: Math.round(pointsRequired) }]
+      .sort((a, b) => a.pointsRequired - b.pointsRequired)
+      .map((t, i) => ({ ...t, tier: i + 1 }));
+    bp.tiers = tiers;
+    bp.tiersCustomized = true;
+    const added = tiers.find((t) => t.pointsRequired === Math.round(pointsRequired));
+    this.ensureRewardRoadmap();
+    this.emit();
+    return added ? added.tier : null;
   }
 
   /** Attaches (or clears, with `null`) the photo on an existing reward

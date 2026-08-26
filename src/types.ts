@@ -149,6 +149,17 @@ export interface RewardItem {
    * already confirmed — see rewardVisual's `revealed` option — so a photo
    * attached ahead of time stays hidden until its tier is actually reached. */
   imageDataUrl?: string;
+  /** Accent colour pair for a user-created theme, as [primary, secondary].
+   * Built-in themes get their whole palette from a body[data-theme="..."]
+   * block in styles.css, which a user-invented id has no equivalent of — so
+   * a user theme carries its two accents here instead and nav's applyTheme
+   * sets them as inline custom properties. Without this a user-made theme
+   * would be inert: equippable, but changing nothing on screen. */
+  colors?: [string, string];
+  /** For a user-created Celebration Effect: the id of the built-in animation
+   * it plays. An animation is code, not data, so a user can't author a new
+   * one — they pick which existing one fires. See celebrate() in ui/toast.ts. */
+  effectAnimation?: string;
   rarity: Rarity;
   kind: RewardKind;
 }
@@ -191,6 +202,13 @@ export interface RewardRoadmapEntry {
   tier: number;
   categoryId: string;
   itemId: string;
+  /** True when the user pinned this reward to this tier themselves (see
+   * Store.setTierReward). Curated seasonal tables are re-applied to every
+   * not-yet-reached tier on each load, which would otherwise silently undo a
+   * hand-picked reward the next time the page opened — so
+   * syncUpcomingTiersToCuratedRoadmap skips anything flagged here. Clearing
+   * the flag hands the tier back to automatic assignment. */
+  manual?: boolean;
 }
 
 export interface Battlepass {
@@ -214,6 +232,14 @@ export interface Battlepass {
   inventory: Record<string, number>;
   /** History of past seasons for reference, keyed by monthKey. */
   seasonHistory: Record<string, { pointsEarned: number; highestTier: number }>;
+  /** True once the user has edited the tier ladder themselves in Settings.
+   * Scheduled seasons re-sync `tiers` to their own ladder whenever the two
+   * differ in length, which is right for a save that simply predates a
+   * seasonal change but wrong for a ladder the user deliberately extended —
+   * without this flag, tiers added in Settings were silently deleted on the
+   * very next page load. Cleared when a season boundary swaps in a fresh
+   * ladder, since that ladder is no longer the user's edit. */
+  tiersCustomized?: boolean;
   /** A snapshot of `tiers` taken right before a scheduled season (see
    * SEASONAL_TIERS in defaults.ts) temporarily swaps in its own tier
    * ladder — restored the moment a season without a scheduled ladder

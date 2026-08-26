@@ -723,6 +723,56 @@ details.manage-recurring summary:hover { color: var(--text); }
 .puzzle-manage-row.drag-over-top { border-top-color: var(--accent); }
 .puzzle-manage-row.drag-over-bottom { border-bottom-color: var(--accent); }
 
+/* --- Tier editor (Settings) --------------------------------------------- */
+.tier-editor-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+}
+.tier-editor-row.reached { opacity: 0.72; }
+.tier-editor-reward { font-size: 12px; font-weight: 600; }
+.tier-add-panel {
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.tier-add-panel h3 { margin: 0 0 4px; font-size: 15px; }
+.theme-color-input {
+  width: 52px; height: 34px; padding: 2px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+}
+
+/* --- Emoji picker ------------------------------------------------------- */
+.emoji-picker { width: 100%; }
+.emoji-picker-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.emoji-picker-preview {
+  width: 34px; height: 34px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-card);
+}
+.emoji-picker-input { max-width: 170px; }
+.emoji-picker-grid {
+  max-height: 210px; overflow-y: auto;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg);
+}
+.emoji-picker-group-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); margin: 8px 0 4px;
+}
+.emoji-picker-group-label:first-child { margin-top: 0; }
+.emoji-picker-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.emoji-picker-button {
+  width: 30px; height: 30px; padding: 0; font-size: 16px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; cursor: pointer;
+}
+.emoji-picker-button:hover { background: var(--bg-elevated); }
+.emoji-picker-button.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 /* --- DC reorder strip (Daily Trials page) ------------------------------- */
 .dc-reorder-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .dc-reorder-row {

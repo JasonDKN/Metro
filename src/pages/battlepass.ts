@@ -195,7 +195,7 @@ function renderAddItemForm(categoryId: string): HTMLElement {
   const submit = () => {
     if (!nameInput.value.trim()) return;
     const kind = isPhotocards ? "unlock" : (kindSelect.value as RewardKind);
-    store.addRewardItem(categoryId, nameInput.value, raritySelect.value as Rarity, kind, "", pendingImage);
+    store.addRewardItem(categoryId, nameInput.value, raritySelect.value as Rarity, kind, "", { imageDataUrl: pendingImage });
     nameInput.value = "";
     fileInput.value = "";
     pendingImage = undefined;

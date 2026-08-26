@@ -38,10 +38,24 @@ const CONFETTI_COLORS = ["#5b8cff", "#7b6bff", "#3ecf8e", "#f0b84f", "#ef6a6a", 
  * Inventory), falling back to the built-in confetti burst if none is
  * equipped or the equipped one is no longer valid. Used when a whole
  * checklist is cleared. */
+/** Resolves the equipped effect to the id of an animation this file actually
+ * implements. A user-created effect can't ship its own animation — animation
+ * is code, not data — so it stores which built-in it plays (see
+ * RewardItem.effectAnimation) and that is what fires. */
+function activeAnimationId(): string | null {
+  const state = store.getState();
+  const effectId = state.settings.activeEffectId;
+  if (!effectId) return null;
+  const item = state.battlepass.categories
+    .find((c) => c.id === "cat-effects")
+    ?.items.find((i) => i.id === effectId);
+  return item?.effectAnimation ?? effectId;
+}
+
 export function celebrate(): void {
   const layer = document.getElementById("celebration-layer");
   if (!layer) return;
-  switch (store.getState().settings.activeEffectId) {
+  switch (activeAnimationId()) {
     case "effect-fireworks":
       fireworks(layer);
       break;

@@ -30,7 +30,25 @@ function avatarEmoji(avatarId: string): string {
 }
 
 function applyTheme(): void {
-  document.body.setAttribute("data-theme", store.getState().settings.activeThemeId);
+  const state = store.getState();
+  const themeId = state.settings.activeThemeId;
+  document.body.setAttribute("data-theme", themeId);
+
+  // Built-in themes get their whole palette from a body[data-theme="..."]
+  // block in styles.css. A user-created theme has no such block, so without
+  // this it would be equippable but change nothing on screen — its two
+  // chosen accents are applied as inline custom properties instead, which
+  // override the stylesheet's for the same reason any inline style does.
+  const custom = state.battlepass.categories
+    .find((c) => c.id === "cat-themes")
+    ?.items.find((i) => i.id === themeId)?.colors;
+  if (custom && custom.length === 2) {
+    document.body.style.setProperty("--accent", custom[0]);
+    document.body.style.setProperty("--accent-2", custom[1]);
+  } else {
+    document.body.style.removeProperty("--accent");
+    document.body.style.removeProperty("--accent-2");
+  }
 }
 
 export function mountNav(active: PageId): void {

@@ -50,7 +50,14 @@ export interface RewardVisualOptions {
  * a generic gift icon. Keeps pages from being a wall of plain text. */
 export function rewardVisual(categoryId: string, itemId: string, description?: string, opts?: RewardVisualOptions): HTMLElement {
   if (categoryId === "cat-themes") {
-    const [c1, c2] = THEME_SWATCHES[itemId] ?? THEME_SWATCHES["theme-default"];
+    // A user-created theme has no THEME_SWATCHES entry — its colours live on
+    // the item itself, so the swatch shows what it will actually look like
+    // rather than a generic default gradient.
+    const custom = store
+      .getState()
+      .battlepass.categories.find((c) => c.id === "cat-themes")
+      ?.items.find((i) => i.id === itemId)?.colors;
+    const [c1, c2] = custom ?? THEME_SWATCHES[itemId] ?? THEME_SWATCHES["theme-default"];
     return el("span", { class: "reward-icon theme-swatch", style: `background: linear-gradient(135deg, ${c1}, ${c2});` });
   }
   if (categoryId === "cat-photocards") {

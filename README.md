@@ -12,7 +12,7 @@ It's a static site (plain TypeScript compiled to JavaScript, no framework, no ba
 - **Shortcuts** (`shortcuts.html`) — quick links to websites and local files/folders (both open as real clickable links). Programs are listed as copyable reference paths, since browsers can't launch installed desktop applications for security reasons.
 - **Battlepass** (`battlepass.html`) — season progress, tier track, your unlocked reward gallery, and reward-pool management (add new reward categories/items any time without losing existing progress).
 - **Inventory** (`inventory.html`) — your trophy case: only shows themes, avatars, titles, celebration effects, and any custom reward category items you've actually earned — nothing locked is listed. Equip a theme/avatar/title/celebration effect directly from here.
-- **Settings** (`settings.html`) — rename your assistant, tune points-per-difficulty and tier thresholds, manage your Daily Puzzles (add, remove, hide, reorder), and export/import a backup file. Appearance (themes/avatars/titles) moved to the Inventory page — see above.
+- **Settings** (`settings.html`) — rename your assistant, tune points-per-difficulty, build out the Battlepass ladder (add tiers and choose or invent the reward each one grants), manage your Daily Puzzles (add, remove, hide, reorder), and export/import a backup file. Appearance (themes/avatars/titles) moved to the Inventory page — see above.
 
 ## Weekday recurrence
 
@@ -62,6 +62,20 @@ Recording a score again for the same day replaces the previous entry and correct
 - Points are purely additive — there's no penalty for missing or unchecking a task. Deleting a task you'd already completed does revoke the points it earned (they'd otherwise be sitting there with nothing behind them), but any battlepass tier/reward you already unlocked along the way stays unlocked.
 - Season points reset to 0 on the 1st of each month; lifetime points never reset.
 - Reaching a new tier grants one **specific** reward — no randomization. Rewards are assigned to tiers in advance, in strictly increasing rarity as you climb (common early tiers, legendary at the top), so the Tier Track on the Battlepass page always shows exactly what every tier gives, including ones you haven't reached yet. Reward categories: themes, avatars, titles, and celebration effects — every category, including Celebration Effects, is guaranteed at least one tier in the roadmap. (Streak Freeze and Wildcard tokens were retired; an in-progress season is re-dealt against the shortened roadmap so nobody ends up short a reward — see Store.removeConsumableRewards.) A tier not yet reached picks up curated design changes like this automatically; a tier you've already earned a reward from keeps exactly what it granted.
+
+### Building your own tiers
+
+The **Battlepass Tiers & Rewards** section in Settings lists every tier with its points cost and exactly what it grants. Tiers you've already reached are read-only — those rewards were really earned, so they can't be swapped out after the fact. For any tier still ahead of you, a dropdown reassigns its reward from anywhere in the pool, or hands it back to automatic assignment.
+
+"Add a tier" takes a points total and either picks an existing reward, lets Metro choose, or creates a brand-new reward on the spot. What the form asks for depends on the category, since the categories genuinely differ:
+
+- **Photocards** — upload a photo (or leave it blank and add it later from the Battlepass page).
+- **Stickers** and **Avatars** — pick an emoji from the grid, or paste any other one.
+- **Themes** — choose two accent colours, which really do become the app's accents while the theme is equipped.
+- **Celebration Effects** — choose which existing animation it plays, since an animation is code rather than data.
+- **Titles** and your own categories — just a name and a rarity.
+
+A reward you pick by hand is pinned: seasonal roadmaps are re-applied to upcoming tiers on every load, and a pinned reward is skipped so it can't be quietly overwritten. Editing the ladder also marks it as yours, which stops a scheduled season from re-syncing it and deleting tiers you added.
 - You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked, and new items become available to fill any tier that was still waiting on one (e.g. if you extend the tier track further than the pool currently covers).
 - The Battlepass and Inventory pages both show a profile banner (your equipped avatar, name, title, and progress to the next tier) and icons throughout — a color swatch for each theme, an emoji for avatars/titles/effects/consumables — so it's not just plain text and numbers.
 - What's equippable is always computed live from your actual grant history (`battlepass.unlocked`) — there's no separate "unlocked items" cache anywhere to fall out of sync, so what the Inventory page shows as earned is exactly what the Battlepass page says you've earned, by construction. If something you had equipped stops being valid (e.g. its item was deleted from the pool while equipped), it falls back to the default rather than leaving a broken selection.

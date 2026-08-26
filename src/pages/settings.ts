@@ -8,7 +8,10 @@ import { store } from "../data/store.js";
 import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { DIFFICULTY_LABELS } from "../types.js";
-import type { Difficulty, Tier } from "../types.js";
+import { rarityLabel } from "../data/rewards.js";
+import { fileToResizedDataUrl } from "../ui/image.js";
+import { emojiPicker } from "../ui/emojiPicker.js";
+import type { Difficulty, Rarity, RewardItem, Tier } from "../types.js";
 import { showToast } from "../ui/toast.js";
 import { renderManagePuzzlesCard } from "../ui/dailyGames.js";
 
@@ -49,62 +52,358 @@ function renderPointsConfig(): HTMLElement {
   ]);
 }
 
-function renderTierEditor(): HTMLElement {
-  const state = store.getState();
-  let workingTiers: { pointsRequired: number }[] = state.battlepass.tiers.map((t) => ({ pointsRequired: t.pointsRequired }));
+const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 
+/** The animations celebrate() actually implements, offered when creating a
+ * Celebration Effect. A user can't author a new animation — that's code — so
+ * they pick which existing one their reward plays. */
+const EFFECT_ANIMATIONS: { id: string; label: string }[] = [
+  { id: "effect-confetti", label: "Confetti Burst" },
+  { id: "effect-fireworks", label: "Fireworks" },
+  { id: "effect-starfall", label: "Starfall" },
+  { id: "effect-aurora", label: "Aurora Wave" },
+  { id: "effect-purple-ocean", label: "Purple Ocean" },
+  { id: "effect-divine-bell", label: "Divine Bell Chime" },
+  { id: "effect-bangtan-flash", label: "Bangtan Bomb Flash" },
+  { id: "effect-fanfare", label: "Metro Fanfare" },
+];
+
+/** Describes the reward a tier currently grants, for the editor's rows. */
+function tierRewardLabel(tier: number): { text: string; manual: boolean } {
+  const bp = store.getState().battlepass;
+  const entry = bp.rewardRoadmap.find((r) => r.tier === tier);
+  if (!entry) return { text: "No reward assigned", manual: false };
+  const category = bp.categories.find((c) => c.id === entry.categoryId);
+  const item = category?.items.find((i) => i.id === entry.itemId);
+  if (!category || !item) return { text: "Reward no longer in the pool", manual: !!entry.manual };
+  return { text: `${item.name} · ${rarityLabel(item.rarity)} · ${category.name}`, manual: !!entry.manual };
+}
+
+/** A <select> of every item in the reward pool, grouped by category. */
+function rewardItemSelect(selectedItemId?: string): HTMLSelectElement {
+  const bp = store.getState().battlepass;
+  const select = el("select", { class: "reward-item-select", style: "max-width:280px;" }) as HTMLSelectElement;
+  select.appendChild(el("option", { value: "" }, ["Let Metro choose"]));
+  for (const cat of bp.categories) {
+    if (cat.items.length === 0) continue;
+    const group = el("optgroup", { label: cat.name }) as HTMLOptGroupElement;
+    for (const item of cat.items) {
+      const option = el("option", { value: `${cat.id}::${item.id}` }, [`${item.name} (${rarityLabel(item.rarity)})`]) as HTMLOptionElement;
+      if (item.id === selectedItemId) option.selected = true;
+      group.appendChild(option);
+    }
+    select.appendChild(group);
+  }
+  return select;
+}
+
+/** The per-category inputs for inventing a brand-new reward. Which fields
+ * appear depends entirely on the category: a Photocard needs a picture, a
+ * Sticker or Avatar needs an emoji, a Theme needs colours, an Effect needs to
+ * know which animation to play, and a Title needs nothing but its name. */
+function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: RewardItem; categoryId: string } | { error: string } } {
+  const bp = store.getState().battlepass;
+
+  const categorySelect = el(
+    "select",
+    { class: "reward-category-select" },
+    bp.categories.map((c, i) => el("option", { value: c.id, selected: i === 0 }, [c.name]))
+  ) as HTMLSelectElement;
+  const nameInput = el("input", { type: "text", class: "reward-name-input", placeholder: "Reward name" }) as HTMLInputElement;
+  const raritySelect = el(
+    "select",
+    { class: "reward-rarity-select" },
+    RARITIES.map((r, i) => el("option", { value: r, selected: i === 0 }, [rarityLabel(r)]))
+  ) as HTMLSelectElement;
+
+  // --- Photocards: a picture ------------------------------------------------
+  let pendingImage: string | undefined;
+  const imagePreview = el("img", { class: "photocard-upload-preview", style: "display:none;" }) as HTMLImageElement;
+  const fileInput = el("input", { type: "file", accept: "image/*" }) as HTMLInputElement;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      pendingImage = await fileToResizedDataUrl(file);
+      imagePreview.src = pendingImage;
+      imagePreview.style.display = "inline-block";
+    } catch {
+      showToast("Couldn't read that image", "Try a different file.");
+    }
+  });
+  const imageField = el("div", { class: "field" }, [
+    el("label", {}, ["Photo (optional — you can upload it later)"]),
+    fileInput,
+    imagePreview,
+  ]);
+
+  // --- Stickers and Avatars: an emoji ---------------------------------------
+  const picker = emojiPicker();
+  const emojiField = el("div", { class: "field", style: "flex-basis:100%;" }, [el("label", {}, ["Pick an emoji"]), picker.wrap]);
+
+  // --- Themes: two accent colours -------------------------------------------
+  const color1 = el("input", { type: "color", value: "#5b8cff", class: "theme-color-input" }) as HTMLInputElement;
+  const color2 = el("input", { type: "color", value: "#7b6bff", class: "theme-color-input" }) as HTMLInputElement;
+  const swatch = el("span", { class: "reward-icon theme-swatch" });
+  const paintSwatch = () => {
+    swatch.setAttribute("style", `background: linear-gradient(135deg, ${color1.value}, ${color2.value});`);
+  };
+  color1.addEventListener("input", paintSwatch);
+  color2.addEventListener("input", paintSwatch);
+  paintSwatch();
+  const themeField = el("div", { class: "field", style: "flex-basis:100%;" }, [
+    el("label", {}, ["Theme colours"]),
+    el("div", { style: "display:flex; align-items:center; gap:10px;" }, [color1, color2, swatch]),
+    el("p", { class: "muted small", style: "margin:4px 0 0;" }, [
+      "These become the app's two accent colours while the theme is equipped.",
+    ]),
+  ]);
+
+  // --- Celebration Effects: which animation plays ---------------------------
+  const animationSelect = el(
+    "select",
+    { class: "reward-animation-select" },
+    EFFECT_ANIMATIONS.map((a, i) => el("option", { value: a.id, selected: i === 0 }, [a.label]))
+  ) as HTMLSelectElement;
+  const effectField = el("div", { class: "field" }, [el("label", {}, ["Plays like"]), animationSelect]);
+
+  const fieldsWrap = el("div", { class: "inline-form", style: "flex-wrap:wrap;" }, [
+    el("div", { class: "field" }, [el("label", {}, ["Category"]), categorySelect]),
+    el("div", { class: "field" }, [el("label", {}, ["Reward name"]), nameInput]),
+    el("div", { class: "field", style: "flex: 0 0 150px;" }, [el("label", {}, ["Rarity"]), raritySelect]),
+    imageField,
+    effectField,
+    emojiField,
+    themeField,
+  ]);
+
+  const syncFields = () => {
+    const id = categorySelect.value;
+    imageField.style.display = id === "cat-photocards" ? "" : "none";
+    emojiField.style.display = id === "cat-stickers" || id === "cat-avatars" ? "" : "none";
+    themeField.style.display = id === "cat-themes" ? "" : "none";
+    effectField.style.display = id === "cat-effects" ? "" : "none";
+  };
+  categorySelect.addEventListener("change", syncFields);
+  syncFields();
+
+  return {
+    wrap: fieldsWrap,
+    create: () => {
+      const categoryId = categorySelect.value;
+      const name = nameInput.value.trim();
+      if (!name) return { error: "Give the reward a name." };
+      const rarity = raritySelect.value as Rarity;
+
+      // Stickers and Avatars render as their emoji, so one is required —
+      // without it they'd fall back to a generic placeholder icon.
+      let description = "";
+      const extras: { imageDataUrl?: string; colors?: [string, string]; effectAnimation?: string } = {};
+      if (categoryId === "cat-stickers" || categoryId === "cat-avatars") {
+        const emoji = picker.value();
+        if (!emoji) return { error: "Pick an emoji for this reward." };
+        description = emoji;
+      } else if (categoryId === "cat-photocards") {
+        extras.imageDataUrl = pendingImage;
+      } else if (categoryId === "cat-themes") {
+        extras.colors = [color1.value, color2.value];
+      } else if (categoryId === "cat-effects") {
+        extras.effectAnimation = animationSelect.value;
+      }
+
+      const item = store.addRewardItem(categoryId, name, rarity, "unlock", description, extras);
+      if (!item) return { error: "Couldn't create that reward." };
+      return { item, categoryId };
+    },
+  };
+}
+
+function renderTierEditor(): HTMLElement {
   const container = el("div", { class: "card" });
   paint();
+  // No subscription here on purpose: the page itself re-renders on every
+  // store change (see render() at the bottom of this file), so subscribing
+  // would both duplicate that work and leak a listener painting a detached
+  // container on every repaint.
   return container;
 
   function paint() {
+    const state = store.getState();
+    const bp = state.battlepass;
     clear(container);
-    container.appendChild(el("h2", {}, ["Battlepass Tier Thresholds"]));
-    container.appendChild(el("p", { class: "muted small" }, ["Total season points required to reach each tier. Add or remove tiers to change how long a season takes."]));
-
-    const rowsContainer = el("div", {});
-    workingTiers.forEach((t, idx) => {
-      const pointsInput = el("input", { type: "text", inputmode: "numeric", value: String(t.pointsRequired) }) as HTMLInputElement;
-      pointsInput.addEventListener("change", () => {
-        const n = Number(pointsInput.value);
-        if (Number.isFinite(n) && n >= 0) workingTiers[idx].pointsRequired = Math.round(n);
-      });
-      rowsContainer.appendChild(
-        el("div", { class: "inline-form", style: "margin-bottom: 6px;" }, [
-          el("div", { style: "flex: 0 0 60px; font-weight:700;" }, [`Tier ${idx + 1}`]),
-          el("div", { class: "field" }, [pointsInput]),
-          el("button", {
-            class: "small danger ghost",
-            onclick: () => {
-              workingTiers.splice(idx, 1);
-              paint();
-            },
-          }, ["Remove"]),
-        ])
-      );
-    });
-    container.appendChild(rowsContainer);
-
+    container.appendChild(el("h2", {}, ["Battlepass Tiers & Rewards"]));
     container.appendChild(
-      el("div", { style: "display:flex; gap:8px; margin-top:10px;" }, [
-        el("button", {
-          onclick: () => {
-            const last = workingTiers[workingTiers.length - 1]?.pointsRequired ?? 0;
-            workingTiers.push({ pointsRequired: last + 200 });
-            paint();
-          },
-        }, ["+ Add Tier"]),
-        el("button", {
-          class: "primary",
-          onclick: () => {
-            const sorted = [...workingTiers].sort((a, b) => a.pointsRequired - b.pointsRequired);
-            const tiers: Tier[] = sorted.map((t, i) => ({ tier: i + 1, pointsRequired: t.pointsRequired }));
-            store.updateTiers(tiers);
-            showToast("Tiers updated");
-          },
-        }, ["Save Tiers"]),
+      el("p", { class: "muted small" }, [
+        "Total season points needed to reach each tier, and exactly what it grants. Tiers you've already reached are locked in — their rewards were really earned, so they can't be swapped out from here.",
       ])
     );
+
+    const rows = el("div", { style: "margin-top:12px;" });
+    for (const tier of bp.tiers) {
+      rows.appendChild(renderTierRow(tier));
+    }
+    container.appendChild(rows);
+    container.appendChild(renderAddTierPanel());
+  }
+
+  function renderTierRow(tier: Tier): HTMLElement {
+    const bp = store.getState().battlepass;
+    const reached = tier.tier <= bp.currentTier;
+    const reward = tierRewardLabel(tier.tier);
+    const entry = bp.rewardRoadmap.find((r) => r.tier === tier.tier);
+
+    const pointsInput = el("input", {
+      type: "text",
+      inputmode: "numeric",
+      value: String(tier.pointsRequired),
+      style: "width:110px;",
+      disabled: reached,
+    }) as HTMLInputElement;
+    pointsInput.addEventListener("change", () => {
+      const n = Number(pointsInput.value);
+      if (!Number.isFinite(n) || n < 0) {
+        pointsInput.value = String(tier.pointsRequired);
+        return;
+      }
+      store.updateTiers(
+        store.getState().battlepass.tiers.map((t) => (t.tier === tier.tier ? { ...t, pointsRequired: Math.round(n) } : t))
+      );
+      showToast("Tier threshold updated", `Tier ${tier.tier} now needs ${Math.round(n)} pts.`);
+    });
+
+    const actions = el("div", { style: "display:flex; gap:6px; align-items:center; flex-wrap:wrap;" });
+    if (reached) {
+      actions.appendChild(el("span", { class: "weekday-tag" }, ["✓ Reached"]));
+    } else {
+      const select = rewardItemSelect(entry?.itemId);
+      select.addEventListener("change", () => {
+        if (!select.value) {
+          store.clearTierReward(tier.tier);
+          showToast("Back to automatic", `Tier ${tier.tier} will pick its own reward.`);
+          return;
+        }
+        const [categoryId, itemId] = select.value.split("::");
+        const result = store.setTierReward(tier.tier, categoryId, itemId);
+        if (!result.ok) {
+          showToast("Couldn't set that reward", result.error);
+          paint();
+        }
+      });
+      actions.appendChild(select);
+      actions.appendChild(
+        el(
+          "button",
+          {
+            class: "small danger ghost",
+            onclick: () => {
+              store.updateTiers(
+                store
+                  .getState()
+                  .battlepass.tiers.filter((t) => t.tier !== tier.tier)
+                  .map((t, i) => ({ tier: i + 1, pointsRequired: t.pointsRequired }))
+              );
+              showToast("Tier removed");
+            },
+          },
+          ["Remove"]
+        )
+      );
+    }
+
+    return el("div", { class: `tier-editor-row${reached ? " reached" : ""}` }, [
+      el("div", { style: "flex: 0 0 62px; font-weight:700;" }, [`Tier ${tier.tier}`]),
+      el("div", { class: "field", style: "margin:0; flex:0 0 120px;" }, [pointsInput]),
+      el("div", { style: "flex:1; min-width:180px;" }, [
+        el("div", { class: "tier-editor-reward" }, [reward.text]),
+        reward.manual ? el("div", { class: "muted small" }, ["Chosen by you"]) : null,
+      ]),
+      actions,
+    ]);
+  }
+
+  function renderAddTierPanel(): HTMLElement {
+    const bp = store.getState().battlepass;
+    const highest = bp.tiers.reduce((max, t) => Math.max(max, t.pointsRequired), 0);
+
+    const pointsInput = el("input", {
+      type: "text",
+      class: "tier-points-input",
+      inputmode: "numeric",
+      value: String(highest + 350),
+      style: "width:120px;",
+    }) as HTMLInputElement;
+
+    const modeSelect = el("select", { class: "tier-mode-select" }, [
+      el("option", { value: "new", selected: true }, ["Create a new reward"]),
+      el("option", { value: "existing" }, ["Use a reward already in the pool"]),
+      el("option", { value: "auto" }, ["Let Metro choose"]),
+    ]) as HTMLSelectElement;
+
+    const builder = renderRewardBuilder();
+    const existingSelect = rewardItemSelect();
+    const existingField = el("div", { class: "field" }, [el("label", {}, ["Which reward"]), existingSelect]);
+
+    const syncMode = () => {
+      builder.wrap.style.display = modeSelect.value === "new" ? "" : "none";
+      existingField.style.display = modeSelect.value === "existing" ? "" : "none";
+    };
+    modeSelect.addEventListener("change", syncMode);
+    syncMode();
+
+    const submit = () => {
+      const points = Number(pointsInput.value);
+      if (!Number.isFinite(points) || points < 0) {
+        showToast("Check the points", "A tier needs a points total of 0 or more.");
+        return;
+      }
+
+      // Resolve the reward BEFORE adding the tier, so a validation failure
+      // doesn't leave a stray empty tier behind.
+      let assignment: { categoryId: string; itemId: string } | null = null;
+      if (modeSelect.value === "new") {
+        const created = builder.create();
+        if ("error" in created) {
+          showToast("Couldn't add that tier", created.error);
+          return;
+        }
+        assignment = { categoryId: created.categoryId, itemId: created.item.id };
+      } else if (modeSelect.value === "existing") {
+        if (!existingSelect.value) {
+          showToast("Pick a reward", "Choose one from the pool, or switch to letting Metro choose.");
+          return;
+        }
+        const [categoryId, itemId] = existingSelect.value.split("::");
+        assignment = { categoryId, itemId };
+      }
+
+      const tierNumber = store.addTier(points);
+      if (tierNumber === null) {
+        showToast("Couldn't add that tier", "Check the points total.");
+        return;
+      }
+      if (assignment) {
+        const result = store.setTierReward(tierNumber, assignment.categoryId, assignment.itemId);
+        if (!result.ok) {
+          showToast("Tier added, but not its reward", result.error);
+          return;
+        }
+      }
+      showToast(`Tier ${tierNumber} added`, `Needs ${Math.round(points)} pts.`, "success");
+    };
+
+    return el("div", { class: "tier-add-panel" }, [
+      el("h3", {}, ["Add a tier"]),
+      el("p", { class: "muted small" }, [
+        "Set what it costs and what it gives. A brand-new reward is created in its category and pinned to this tier, so it won't be handed out anywhere else.",
+      ]),
+      el("div", { class: "inline-form" }, [
+        el("div", { class: "field", style: "flex: 0 0 150px;" }, [el("label", {}, ["Points required"]), pointsInput]),
+        el("div", { class: "field", style: "flex: 0 0 250px;" }, [el("label", {}, ["Reward"]), modeSelect]),
+        existingField,
+      ]),
+      builder.wrap,
+      el("button", { class: "primary", style: "margin-top:8px;", onclick: submit }, ["Add Tier"]),
+    ]);
   }
 }
 
