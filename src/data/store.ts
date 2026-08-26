@@ -16,6 +16,7 @@ import type {
   Checklist,
   DailyGameConfig,
   DailyGameEntry,
+  DailyGameScoring,
   Difficulty,
   PlacedSticker,
   PointsConfig,
@@ -152,6 +153,7 @@ class Store {
     this.ensureTrialChecklists();
     this.ensureDailyGames();
     this.ensurePhotocardAlbum();
+    this.ensureSeasonalTierLadder();
     this.ensureBtsRewardPack();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
@@ -202,9 +204,17 @@ class Store {
       this.state.dailyGames = defaultDailyGamesState();
       return;
     }
-    const existingIds = new Set(this.state.dailyGames.configs.map((c) => c.id));
+    const dg = this.state.dailyGames;
+    if (!dg.removedBuiltInIds) dg.removedBuiltInIds = [];
+    const existingIds = new Set(dg.configs.map((c) => c.id));
+    // A built-in the user deliberately removed must NOT come back. Without
+    // this check the additive backfill below — which is what delivers
+    // newly-shipped built-ins to existing saves — would silently undo every
+    // deletion on the next load. See DailyGamesState.removedBuiltInIds.
+    const removed = new Set(dg.removedBuiltInIds);
     for (const config of defaultDailyGamesState().configs) {
-      if (!existingIds.has(config.id)) this.state.dailyGames.configs.push(config);
+      if (existingIds.has(config.id) || removed.has(config.id)) continue;
+      dg.configs.push(config);
     }
   }
 
@@ -292,6 +302,41 @@ class Store {
     if (!this.state.photocardAlbum) {
       this.state.photocardAlbum = defaultPhotocardAlbum();
     }
+  }
+
+  /** Tops up the tier ladder when the current season's scheduled ladder (see
+   * SEASONAL_TIERS) has grown since the save last entered that season.
+   *
+   * processDueRollovers only swaps bp.tiers at a month BOUNDARY, so a save
+   * that rolled into a scheduled season back when its ladder had 30 tiers
+   * keeps a 30-tier ladder forever, even after the ladder is later extended
+   * to 32. The Battlepass Tier Track renders straight from bp.tiers, so
+   * those extra tiers — and the rewards curated for them — were invisible:
+   * the roadmap promised rewards at tiers the user could never even see.
+   *
+   * Append-only, and only when the existing ladder is an exact prefix of the
+   * seasonal one. That prefix check is the safety catch: if the user has
+   * customized their thresholds in Settings (see updateTiers), the ladder no
+   * longer matches and we leave it completely alone rather than stomping
+   * their setup every page load. Tiers already present are never modified,
+   * so nothing already reached shifts underneath the user. Idempotent.
+   *
+   * Must run before ensureRewardRoadmap so any newly-appended tier gets its
+   * curated reward assigned in the same pass. */
+  private ensureSeasonalTierLadder(): void {
+    const bp = this.state.battlepass;
+    const seasonal = SEASONAL_TIERS[bp.currentMonthKey];
+    if (!seasonal) return;
+
+    const current = [...bp.tiers].sort((a, b) => a.tier - b.tier);
+    if (current.length >= seasonal.length) return;
+
+    const isPrefix = current.every(
+      (t, i) => seasonal[i] && t.tier === seasonal[i].tier && t.pointsRequired === seasonal[i].pointsRequired
+    );
+    if (!isPrefix) return;
+
+    bp.tiers = seasonal.map((t) => ({ ...t }));
   }
 
   /** Which curated tier->reward table is "live" right now — the current
@@ -1270,6 +1315,55 @@ class Store {
     return findDailyGameEntry(this.state.dailyGames, gameId, date);
   }
 
+  /** Adds a user-defined puzzle to the Daily Puzzles list. Returns null (and
+   * changes nothing) if the name is blank or already taken — the caller shows
+   * the reason, since a silently-ignored submit is worse than a message.
+   * Name matching is case-insensitive so "wordle" can't shadow "Wordle". */
+  addDailyGame(name: string, scoring: DailyGameScoring): DailyGameConfig | null {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const dg = this.state.dailyGames;
+    if (dg.configs.some((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase())) return null;
+
+    const config: DailyGameConfig = {
+      id: makeId("game"),
+      name: trimmed,
+      scoring,
+      builtIn: false,
+      createdAt: new Date().toISOString(),
+    };
+    dg.configs.push(config);
+    this.emit();
+    return config;
+  }
+
+  /** Removes a puzzle and its logged history, keeping every Battlepass point
+   * it ever awarded.
+   *
+   * Points are deliberately NOT revoked here, unlike deleting a task. A task
+   * is a thing you did today; a puzzle is a fixture you've been logging for
+   * weeks or months, so revoking its points could yank the season back below
+   * tiers already reached and rewards already celebrated. Metro's points are
+   * additive by design, and "I don't play this one anymore" shouldn't read as
+   * "none of those mornings counted".
+   *
+   * Removing a built-in also records a tombstone so ensureDailyGames doesn't
+   * re-add it on the next load. Returns false if there was no such puzzle. */
+  removeDailyGame(gameId: string): boolean {
+    const dg = this.state.dailyGames;
+    const config = dg.configs.find((c) => c.id === gameId);
+    if (!config) return false;
+
+    dg.configs = dg.configs.filter((c) => c.id !== gameId);
+    dg.entries = dg.entries.filter((e) => e.gameId !== gameId);
+    if (config.builtIn) {
+      if (!dg.removedBuiltInIds) dg.removedBuiltInIds = [];
+      if (!dg.removedBuiltInIds.includes(gameId)) dg.removedBuiltInIds.push(gameId);
+    }
+    this.emit();
+    return true;
+  }
+
   /** The best score ever recorded for a game, in points — or null if it's
    * never been logged. See bestDailyGameScore for how "best" is defined. */
   getBestDailyGameScore(gameId: string): number | null {
@@ -1385,6 +1479,7 @@ class Store {
       this.ensureTrialChecklists();
       this.ensureDailyGames();
       this.ensurePhotocardAlbum();
+      this.ensureSeasonalTierLadder();
       this.ensureBtsRewardPack();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();

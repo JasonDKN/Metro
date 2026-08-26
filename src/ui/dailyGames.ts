@@ -10,7 +10,13 @@ import { store } from "../data/store.js";
 import { el } from "./dom.js";
 import { showToast } from "./toast.js";
 import { todayISO } from "../util/date.js";
-import { formatDailyGameRawValue } from "../data/dailyGames.js";
+import {
+  buildDailyGameScoring,
+  computeDailyGamePoints,
+  describeDailyGameScoring,
+  formatDailyGameRawValue,
+} from "../data/dailyGames.js";
+import type { DailyGameScoringKind } from "../data/dailyGames.js";
 import type { DailyGameConfig, DailyGameEntry } from "../types.js";
 
 type GameInput = { rawValue?: number; guesses?: number | null; actualUnderPar?: number; bestUnderPar?: number };
@@ -29,11 +35,16 @@ export function renderDailyGamesCard(): HTMLElement {
     el("p", { class: "muted small" }, [
       `Log today's score for each puzzle — points scale from ${dg.minPoints} to ${dg.maxPoints}, roughly matching a Medium-to-Extreme task.`,
     ]),
-    el(
-      "div",
-      { class: "task-list", style: "margin-top: 12px;" },
-      games.map((g) => renderGameRow(g, date))
-    ),
+    games.length === 0
+      ? el("div", { class: "empty-state", style: "margin-top:12px;" }, [
+          "No puzzles yet — add one below and it'll show up here to log every day.",
+        ])
+      : el(
+          "div",
+          { class: "task-list", style: "margin-top: 12px;" },
+          games.map((g) => renderGameRow(g, date))
+        ),
+    renderManageSection(),
   ]);
 }
 
@@ -194,4 +205,217 @@ function buildInputs(
       return { actualUnderPar: actual, bestUnderPar: best };
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Managing the puzzle list
+//
+// Adding a puzzle asks three things: what it's called, how it's scored, and
+// the minimum and maximum scores possible. Those bounds are the anchors the
+// point curve is built from — see buildDailyGameScoring — so the form shows a
+// live preview of what each end is actually worth rather than making the user
+// guess at how their numbers will be interpreted.
+// ---------------------------------------------------------------------------
+
+interface ScoringKindMeta {
+  label: string;
+  minLabel: string;
+  maxLabel: string;
+  /** Whether the minimum or the maximum is the better result — drives the
+   * preview wording and nothing else (the real mapping lives in
+   * buildDailyGameScoring). */
+  betterEnd: "min" | "max";
+  step: string;
+}
+
+const SCORING_KINDS: Record<DailyGameScoringKind, ScoringKindMeta> = {
+  higherScore: { label: "A score — higher is better", minLabel: "Minimum score", maxLabel: "Maximum score", betterEnd: "max", step: "any" },
+  lowerScore: { label: "A score — lower is better", minLabel: "Minimum score", maxLabel: "Maximum score", betterEnd: "min", step: "any" },
+  fasterTime: { label: "A time in seconds — faster is better", minLabel: "Fastest time (seconds)", maxLabel: "Slowest time (seconds)", betterEnd: "min", step: "1" },
+  fewerGuesses: { label: "Guesses — fewer is better", minLabel: "Fewest guesses", maxLabel: "Most guesses", betterEnd: "min", step: "1" },
+};
+
+function renderManageSection(): HTMLElement {
+  return el("div", { class: "puzzle-manage" }, [
+    el("h3", {}, ["Manage puzzles"]),
+    el("p", { class: "muted small" }, [
+      "Add a puzzle you've picked up, or remove one you've stopped playing. Removing a puzzle clears its logged history and Personal Record, but every Battlepass point it already earned stays on your season.",
+    ]),
+    renderManageList(),
+    renderAddPuzzleForm(),
+  ]);
+}
+
+function renderManageList(): HTMLElement {
+  const dg = store.getState().dailyGames;
+  const games = store.getDailyGames();
+  if (games.length === 0) {
+    return el("p", { class: "muted small" }, ["Nothing to manage yet."]);
+  }
+
+  return el(
+    "div",
+    { class: "puzzle-manage-list" },
+    games.map((config) => {
+      const entryCount = dg.entries.filter((e) => e.gameId === config.id).length;
+      const row = el("div", { class: "puzzle-manage-row" }, [
+        el("div", {}, [
+          el("div", { class: "puzzle-manage-name" }, [config.name]),
+          el("div", { class: "puzzle-manage-rule" }, [describeDailyGameScoring(config, dg)]),
+        ]),
+      ]);
+
+      // Two-step confirm, inline rather than a browser confirm() dialog:
+      // removal throws away logged history, so it shouldn't be one stray
+      // click away, but a modal for a puzzle you no longer play is heavy.
+      const actions = el("div", { style: "display:flex; gap:6px; align-items:center;" });
+      const showConfirm = () => {
+        while (actions.firstChild) actions.removeChild(actions.firstChild);
+        actions.appendChild(
+          el("span", { class: "muted small" }, [
+            entryCount > 0 ? `Remove and discard ${entryCount} logged ${entryCount === 1 ? "day" : "days"}?` : "Remove this puzzle?",
+          ])
+        );
+        actions.appendChild(
+          el(
+            "button",
+            {
+              class: "small danger",
+              onclick: () => {
+                if (store.removeDailyGame(config.id)) {
+                  showToast("Puzzle removed", `${config.name} is gone. The points it earned are still yours.`);
+                }
+              },
+            },
+            ["Yes, remove"]
+          )
+        );
+        actions.appendChild(el("button", { class: "small ghost", onclick: showDefault }, ["Cancel"]));
+      };
+      const showDefault = () => {
+        while (actions.firstChild) actions.removeChild(actions.firstChild);
+        actions.appendChild(el("button", { class: "small danger ghost", onclick: showConfirm }, ["Remove"]));
+      };
+      showDefault();
+
+      row.appendChild(actions);
+      return row;
+    })
+  );
+}
+
+function renderAddPuzzleForm(): HTMLElement {
+  const dg = store.getState().dailyGames;
+
+  const nameInput = el("input", { type: "text", placeholder: "e.g. Connections" }) as HTMLInputElement;
+  const kindSelect = el(
+    "select",
+    {},
+    (Object.keys(SCORING_KINDS) as DailyGameScoringKind[]).map((k, i) =>
+      el("option", { value: k, selected: i === 0 }, [SCORING_KINDS[k].label])
+    )
+  ) as HTMLSelectElement;
+
+  const minInput = el("input", { type: "number", step: "any", style: "width:130px;" }) as HTMLInputElement;
+  const maxInput = el("input", { type: "number", step: "any", style: "width:130px;" }) as HTMLInputElement;
+  const failInput = el("input", { type: "number", min: "0", step: "1", value: "0", style: "width:130px;" }) as HTMLInputElement;
+
+  const minLabel = el("label", {}, [SCORING_KINDS.higherScore.minLabel]);
+  const maxLabel = el("label", {}, [SCORING_KINDS.higherScore.maxLabel]);
+  const minField = el("div", { class: "field", style: "flex: 0 0 150px;" }, [minLabel, minInput]);
+  const maxField = el("div", { class: "field", style: "flex: 0 0 150px;" }, [maxLabel, maxInput]);
+  const failField = el("div", { class: "field", style: "flex: 0 0 150px;" }, [el("label", {}, ["Points if you fail"]), failInput]);
+
+  const preview = el("div", { class: "puzzle-scoring-preview" });
+
+  const currentKind = (): DailyGameScoringKind => kindSelect.value as DailyGameScoringKind;
+
+  const readDraft = () => ({
+    kind: currentKind(),
+    minValue: minInput.value === "" ? NaN : Number(minInput.value),
+    maxValue: maxInput.value === "" ? NaN : Number(maxInput.value),
+    failPoints: failInput.value === "" ? 0 : Number(failInput.value),
+  });
+
+  const refresh = () => {
+    const meta = SCORING_KINDS[currentKind()];
+    minLabel.textContent = meta.minLabel;
+    maxLabel.textContent = meta.maxLabel;
+    minInput.step = meta.step;
+    maxInput.step = meta.step;
+    failField.style.display = currentKind() === "fewerGuesses" ? "" : "none";
+
+    while (preview.firstChild) preview.removeChild(preview.firstChild);
+    preview.className = "puzzle-scoring-preview";
+
+    const draft = readDraft();
+    if (Number.isNaN(draft.minValue) || Number.isNaN(draft.maxValue)) {
+      preview.appendChild(
+        el("span", { class: "muted" }, ["Fill in the minimum and maximum and I'll work out what each score is worth."])
+      );
+      return;
+    }
+
+    const built = buildDailyGameScoring(draft);
+    if (!built.ok) {
+      preview.className = "puzzle-scoring-preview invalid";
+      preview.appendChild(el("span", {}, [built.error]));
+      return;
+    }
+
+    // Run the real scoring function rather than restating the formula, so
+    // the preview can never drift from what actually gets awarded.
+    const probe: DailyGameConfig = { id: "preview", name: "preview", scoring: built.scoring, builtIn: false, createdAt: "" };
+    const asInput = (value: number) =>
+      built.scoring.method === "guessCount" ? { guesses: value } : { rawValue: value };
+    const minPts = computeDailyGamePoints(probe, asInput(draft.minValue), dg);
+    const maxPts = computeDailyGamePoints(probe, asInput(draft.maxValue), dg);
+    const meta2 = SCORING_KINDS[currentKind()];
+    const minIsBetter = meta2.betterEnd === "min";
+
+    preview.appendChild(el("div", {}, [`${meta2.minLabel} (${draft.minValue}) earns `, el("strong", { class: minIsBetter ? "puzzle-preview-good" : "puzzle-preview-bad" }, [`${minPts} pts`])]));
+    preview.appendChild(el("div", {}, [`${meta2.maxLabel} (${draft.maxValue}) earns `, el("strong", { class: minIsBetter ? "puzzle-preview-bad" : "puzzle-preview-good" }, [`${maxPts} pts`])]));
+    if (built.scoring.method === "guessCount") {
+      preview.appendChild(el("div", { class: "muted" }, [`A failed day earns ${built.scoring.failPoints} pts.`]));
+    }
+    preview.appendChild(el("div", { class: "muted" }, ["Anything in between scales smoothly across that range."]));
+  };
+
+  kindSelect.addEventListener("change", refresh);
+  for (const input of [minInput, maxInput, failInput]) input.addEventListener("input", refresh);
+  refresh();
+
+  const submit = () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      showToast("Name it first", "Give the puzzle a name so you can tell it apart in the list.");
+      return;
+    }
+    const built = buildDailyGameScoring(readDraft());
+    if (!built.ok) {
+      showToast("Check the scores", built.error);
+      return;
+    }
+    const added = store.addDailyGame(name, built.scoring);
+    if (!added) {
+      showToast("Already have that one", `A puzzle called "${name}" is already in your list.`);
+      return;
+    }
+    // The store emit re-renders the whole card, so there's no need to reset
+    // these inputs — this element is about to be replaced wholesale.
+    showToast("Puzzle added", `${added.name} is ready to log.`, "success");
+  };
+
+  return el("div", {}, [
+    el("h3", { style: "margin-top:4px;" }, ["Add a puzzle"]),
+    el("div", { class: "inline-form" }, [
+      el("div", { class: "field" }, [el("label", {}, ["Puzzle name"]), nameInput]),
+      el("div", { class: "field", style: "flex: 0 0 260px;" }, [el("label", {}, ["How is it scored?"]), kindSelect]),
+      minField,
+      maxField,
+      failField,
+      el("button", { class: "small primary", onclick: submit }, ["Add Puzzle"]),
+    ]),
+    preview,
+  ]);
 }

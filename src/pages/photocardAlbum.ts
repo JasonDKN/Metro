@@ -120,7 +120,13 @@ function renderPhotocardPage(pageIndex: number, owned: RewardItem[]): HTMLElemen
           slots.map((item) =>
             item
               ? el("div", { class: "photocard-pocket filled" }, [
-                  rewardVisual("cat-photocards", item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: true }),
+                  rewardVisual("cat-photocards", item.id, item.description, {
+                    imageDataUrl: item.imageDataUrl,
+                    revealed: true,
+                    title: item.name,
+                    subtitle: rarityLabel(item.rarity),
+                    caption: item.flavorText,
+                  }),
                   el("div", { class: "photocard-pocket-caption" }, [
                     el("div", { class: "name" }, [item.name]),
                     el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity)]),

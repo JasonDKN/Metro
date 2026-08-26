@@ -346,4 +346,12 @@ export interface DailyGamesState {
   maxPoints: number;
   configs: DailyGameConfig[];
   entries: DailyGameEntry[];
+  /** Ids of built-in puzzles the user has deliberately removed. Needed
+   * because Store.ensureDailyGames additively re-adds any built-in a save is
+   * missing (that's how newly-shipped built-ins reach existing users) —
+   * without a tombstone here, deleting a built-in would silently undo itself
+   * on the very next page load. Only built-ins need this; a user-added
+   * puzzle is simply gone once removed, since nothing ever re-seeds it.
+   * Optional so saves from before puzzles were editable still load. */
+  removedBuiltInIds?: string[];
 }

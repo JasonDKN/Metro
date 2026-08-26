@@ -7,6 +7,7 @@
 import { store } from "../data/store.js";
 import { el } from "./dom.js";
 import { BUILT_IN_AVATARS } from "../data/defaults.js";
+import { openImageLightbox } from "./lightbox.js";
 
 /** Accent-color pairs mirroring each built-in theme's CSS custom properties
  * (see body[data-theme="..."] in styles.css) — used to render a small
@@ -32,6 +33,12 @@ export const THEME_SWATCHES: Record<string, [string, string]> = {
 export interface RewardVisualOptions {
   imageDataUrl?: string;
   revealed?: boolean;
+  /** Captions for the enlarged view opened when an owned Photocard's
+   * thumbnail is clicked. Purely cosmetic — a Photocard with none of these
+   * still opens, just without a caption block. */
+  title?: string;
+  subtitle?: string;
+  caption?: string;
 }
 
 /** A little visual stand-in for a reward: a color swatch for themes (pulled
@@ -48,7 +55,29 @@ export function rewardVisual(categoryId: string, itemId: string, description?: s
   }
   if (categoryId === "cat-photocards") {
     if (opts?.revealed && opts.imageDataUrl) {
-      return el("span", { class: "reward-icon photocard-thumb" }, [el("img", { src: opts.imageDataUrl, alt: "Photocard" })]);
+      // A real, owned photo — make it clickable so it can be viewed at a
+      // size worth looking at. This is deliberately the ONLY place a
+      // lightbox gets wired up for Photocards: it sits behind the same
+      // `revealed && imageDataUrl` check that decides whether the photo is
+      // rendered at all, so a locked card can never become openable no
+      // matter which page is doing the rendering.
+      const src = opts.imageDataUrl;
+      return el(
+        "button",
+        {
+          type: "button",
+          class: "reward-icon photocard-thumb photocard-openable",
+          title: opts.title ? `${opts.title} — click to enlarge` : "Click to enlarge",
+          "aria-label": opts.title ? `Enlarge ${opts.title}` : "Enlarge photocard",
+          onclick: (e: Event) => {
+            // Photocards render inside cards and rows that have their own
+            // click behavior in places; keep the click from doing double duty.
+            e.stopPropagation();
+            openImageLightbox({ src, title: opts.title, subtitle: opts.subtitle, caption: opts.caption });
+          },
+        },
+        [el("img", { src, alt: opts.title ?? "Photocard" })]
+      );
     }
     // Not yet unlocked (or unlocked with no photo attached yet) — always a
     // mystery card back, regardless of whether a photo already exists on

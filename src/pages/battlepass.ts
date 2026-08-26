@@ -34,7 +34,7 @@ function renderTierTrack(): HTMLElement {
   return el("div", { class: "card" }, [
     el("h2", {}, ["Tier Track"]),
     el("p", { class: "muted small" }, [
-      "Every tier grants one specific reward — no randomization — in increasing rarity as you climb. Here's the whole roadmap.",
+      `Every tier grants one specific reward — no randomization — in increasing rarity as you climb. All ${bp.tiers.length} tiers in this season are listed below, locked ones included, so you can always see exactly what's coming.`,
     ]),
     el(
       "div",
@@ -53,7 +53,13 @@ function renderTierTrack(): HTMLElement {
           ]),
           item && category
             ? el("div", { class: "tier-reward" }, [
-                rewardVisual(category.id, item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: status === "reached" }),
+                rewardVisual(category.id, item.id, item.description, {
+                  imageDataUrl: item.imageDataUrl,
+                  revealed: status === "reached",
+                  title: item.name,
+                  subtitle: rarityLabel(item.rarity),
+                  caption: item.flavorText,
+                }),
                 el("div", {}, [
                   el("div", { class: "tier-reward-name" }, [item.name]),
                   el("div", { class: `rarity-${item.rarity} small` }, [
@@ -101,7 +107,13 @@ function renderUnlockedGallery(): HTMLElement {
       sorted.map((r) => {
         const item = bp.categories.find((c) => c.id === r.categoryId)?.items.find((i) => i.id === r.rewardId);
         return el("div", { class: "reward-chip" }, [
-          rewardVisual(r.categoryId, r.rewardId, item?.description, { imageDataUrl: item?.imageDataUrl, revealed: true }),
+          rewardVisual(r.categoryId, r.rewardId, item?.description, {
+            imageDataUrl: item?.imageDataUrl,
+            revealed: true,
+            title: r.name,
+            subtitle: `${rarityLabel(r.rarity)} · ${r.categoryName} · Tier ${r.tier}`,
+            caption: item?.flavorText,
+          }),
           el("div", {}, [
             el("div", { class: "name" }, [r.name]),
             el("div", { class: `rarity-${r.rarity}` }, [rarityLabel(r.rarity)]),
@@ -134,7 +146,13 @@ function renderRewardPool(): HTMLElement {
         cat.items.map((item) => {
           const owned = item.kind === "consumable" || unlockedUnlockIds.has(item.id);
           return el("div", { class: "reward-chip", style: owned ? "" : "opacity:0.5;" }, [
-            rewardVisual(cat.id, item.id, item.description, { imageDataUrl: item.imageDataUrl, revealed: owned }),
+            rewardVisual(cat.id, item.id, item.description, {
+              imageDataUrl: item.imageDataUrl,
+              revealed: owned,
+              title: item.name,
+              subtitle: rarityLabel(item.rarity),
+              caption: item.flavorText,
+            }),
             el("div", { style: "flex:1;" }, [
               el("div", { class: "name" }, [item.name + (owned ? " ✓" : "")]),
               el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity), item.kind === "consumable" ? " · consumable" : ""]),
