@@ -1070,8 +1070,44 @@ class Store {
   }
 
   /** The six Daily Trials Checklist slots, in a stable order. */
+  /** The six DC checklists, in display order. Order comes from their relative
+   * positions in `state.checklists` rather than from TRIAL_SLOT_IDS, so the
+   * user can rearrange them (see reorderTrialChecklists) — the slot ids stay
+   * fixed as identity, they just no longer dictate the running order. */
   getTrialChecklists(): Checklist[] {
-    return TRIAL_SLOT_IDS.map((id) => this.findChecklist(id)).filter((c): c is Checklist => !!c);
+    return this.state.checklists.filter((c) => isTrialChecklistId(c.id));
+  }
+
+  /** Rearranges the DC checklists to match `orderedIds`.
+   *
+   * Only the positions that already held a trial checklist are rewritten, so
+   * the primary daily checklist and any user-created lists stay exactly where
+   * they are in `state.checklists` — the same approach reorderTasks uses to
+   * avoid disturbing rows it isn't reordering. Any trial missing from
+   * `orderedIds` keeps its place at the end rather than vanishing. */
+  reorderTrialChecklists(orderedIds: string[]): void {
+    const slots: number[] = [];
+    this.state.checklists.forEach((c, i) => {
+      if (isTrialChecklistId(c.id)) slots.push(i);
+    });
+    if (slots.length === 0) return;
+
+    const trials = slots.map((i) => this.state.checklists[i]);
+    const byId = new Map(trials.map((c) => [c.id, c]));
+    const reordered: Checklist[] = [];
+    for (const id of orderedIds) {
+      const cl = byId.get(id);
+      if (cl && !reordered.includes(cl)) reordered.push(cl);
+    }
+    for (const cl of trials) {
+      if (!reordered.includes(cl)) reordered.push(cl);
+    }
+    if (reordered.every((c, i) => c === trials[i])) return;
+
+    slots.forEach((slotIndex, i) => {
+      this.state.checklists[slotIndex] = reordered[i];
+    });
+    this.emit();
   }
 
   addTask(checklistId: string, text: string, difficulty: Difficulty, recurDays?: number[]): Task | null {
@@ -1436,8 +1472,46 @@ class Store {
   // Daily Puzzles
   // ---------------------------------------------------------------------
 
+  /** Every configured puzzle, hidden ones included, in display order. This is
+   * the list the manage UI works from; the daily logging list wants
+   * getVisibleDailyGames instead. */
   getDailyGames(): DailyGameConfig[] {
     return this.state.dailyGames.configs;
+  }
+
+  /** Just the puzzles to actually show for logging today. */
+  getVisibleDailyGames(): DailyGameConfig[] {
+    return this.state.dailyGames.configs.filter((c) => !c.hidden);
+  }
+
+  /** Hides or unhides a puzzle. Nothing is deleted — its logged days and
+   * Personal Record stay exactly where they are, so unhiding restores the
+   * puzzle complete with its history. */
+  setDailyGameHidden(gameId: string, hidden: boolean): void {
+    const config = this.state.dailyGames.configs.find((c) => c.id === gameId);
+    if (!config || !!config.hidden === hidden) return;
+    config.hidden = hidden;
+    this.emit();
+  }
+
+  /** Reorders the puzzle list to match `orderedIds`. Any configured puzzle
+   * missing from that list keeps its relative position at the end rather than
+   * being dropped — a reorder should never be able to lose a puzzle, even if
+   * the caller passes a stale or partial list. */
+  reorderDailyGames(orderedIds: string[]): void {
+    const dg = this.state.dailyGames;
+    const byId = new Map(dg.configs.map((c) => [c.id, c]));
+    const reordered: DailyGameConfig[] = [];
+    for (const id of orderedIds) {
+      const config = byId.get(id);
+      if (config && !reordered.includes(config)) reordered.push(config);
+    }
+    for (const config of dg.configs) {
+      if (!reordered.includes(config)) reordered.push(config);
+    }
+    if (reordered.every((c, i) => c === dg.configs[i])) return;
+    dg.configs = reordered;
+    this.emit();
   }
 
   getDailyGameEntry(gameId: string, date: string): DailyGameEntry | undefined {

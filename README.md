@@ -7,12 +7,12 @@ It's a static site (plain TypeScript compiled to JavaScript, no framework, no ba
 ## Pages
 
 - **Daily General Checklist** (`index.html`) — the highlighted, top-priority list. Retitles itself each day (e.g. "Thursday Daily General Checklist") and shows only the tasks scheduled for today — see "Weekday recurrence" below. Auto-resets every day; shows what you missed yesterday and your streak.
-- **Daily Trials Checklist** (`trials.html`) — six independent, auto-resetting daily checklists ("DC 1"–"DC 6" by default, rename each to whatever your DCs actually are). Turn individual DCs on/off depending on which ones you're targeting that day — a DC that's off is paused and won't reset until you turn it back on. A bulk-add form lets you add one task to all six DCs at once.
+- **Daily Trials Checklist** (`trials.html`) — six independent, auto-resetting daily checklists ("DC 1"–"DC 6" by default, rename each to whatever your DCs actually are). Turn individual DCs on/off depending on which ones you're targeting that day — a DC that's off is paused and won't reset until you turn it back on. A bulk-add form lets you add one task to all six DCs at once, and an "Order" strip at the top of the page lets you drag the six DCs into whatever running order you like — the cards below follow it.
 - **Checklists** (`checklists.html`) — create as many additional checklists as you want. They don't auto-reset by default (you can opt a checklist into daily reset too).
 - **Shortcuts** (`shortcuts.html`) — quick links to websites and local files/folders (both open as real clickable links). Programs are listed as copyable reference paths, since browsers can't launch installed desktop applications for security reasons.
 - **Battlepass** (`battlepass.html`) — season progress, tier track, your unlocked reward gallery, and reward-pool management (add new reward categories/items any time without losing existing progress).
 - **Inventory** (`inventory.html`) — your trophy case: only shows themes, avatars, titles, celebration effects, and any custom reward category items you've actually earned — nothing locked is listed. Equip a theme/avatar/title/celebration effect directly from here.
-- **Settings** (`settings.html`) — rename your assistant, tune points-per-difficulty and tier thresholds, and export/import a backup file. Appearance (themes/avatars/titles) moved to the Inventory page — see above.
+- **Settings** (`settings.html`) — rename your assistant, tune points-per-difficulty and tier thresholds, manage your Daily Puzzles (add, remove, hide, reorder), and export/import a backup file. Appearance (themes/avatars/titles) moved to the Inventory page — see above.
 
 ## Weekday recurrence
 
@@ -40,7 +40,9 @@ This only applies to "never resets" checklists (including custom ones) — daily
 
 ## Daily Puzzles
 
-The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for five games — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — and earn Battlepass points scaled to how well you did. Each game also shows a "🏆 Personal Record" badge with the best points you've ever scored on it, once you've logged at least one result.
+The Daily General Checklist page has a "Daily Puzzles" card where you can log today's score for each puzzle and earn Battlepass points scaled to how well you did. It ships with five — Minute Cryptic, Maptap.gg, Wordle, the Countries of the World Quiz (Sporcle), and 18 Words — but the list is yours: manage it under "Daily Puzzles" on the Settings page, where you can add your own, remove any of them (built-ins included), hide one you're taking a break from, and drag them into whatever order you want. Each puzzle also shows a "🏆 Personal Record" badge with the best result you've ever logged for it.
+
+Adding a puzzle asks three things: its name, how it's scored (a score where higher or lower is better, a time in seconds, or a guess count), and the minimum and maximum scores possible. Those bounds anchor the point curve, and the form previews what each end is worth before you commit. Hiding a puzzle keeps every logged day and its Personal Record — only removing discards those, and even then the Battlepass points it earned stay on your season.
 
 Every game's score maps into the same 10–50 point range, calibrated so a great puzzle day feels roughly like clearing a Medium-to-Extreme task, and even a rough day still earns the floor amount:
 

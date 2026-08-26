@@ -1,6 +1,6 @@
 // ============================================================================
-// Settings page — assistant identity, points/tier tuning, and backup/
-// restore. Appearance & Rank (theme/avatar/title selection) lives on the
+// Settings page — assistant identity, points/tier tuning, Daily Puzzles
+// management, and backup/restore. Appearance & Rank (theme/avatar/title selection) lives on the
 // Inventory page now, alongside the rest of your unlocked rewards.
 // ============================================================================
 
@@ -10,6 +10,7 @@ import { el, clear, qs } from "../ui/dom.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import type { Difficulty, Tier } from "../types.js";
 import { showToast } from "../ui/toast.js";
+import { renderManagePuzzlesCard } from "../ui/dailyGames.js";
 
 function renderIdentity(): HTMLElement {
   const state = store.getState();
@@ -163,6 +164,7 @@ function render(): void {
   root.appendChild(renderIdentity());
   root.appendChild(renderPointsConfig());
   root.appendChild(renderTierEditor());
+  root.appendChild(renderManagePuzzlesCard());
   root.appendChild(renderBackup());
   root.appendChild(renderDangerZone());
 }

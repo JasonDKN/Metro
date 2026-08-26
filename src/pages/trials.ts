@@ -10,6 +10,7 @@ import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { renderChecklistCard, difficultySelect, weekdayPicker } from "../ui/taskList.js";
 import { showToast } from "../ui/toast.js";
+import { enableDragReorder } from "../ui/dragList.js";
 import type { Checklist, Difficulty } from "../types.js";
 
 function renderBulkAddForm(): HTMLElement {
@@ -44,6 +45,45 @@ function renderBulkAddForm(): HTMLElement {
       el("label", {}, ["Recurs on (applies to all 6 — defaults to every day)"]),
       picker.wrap,
     ]),
+  ]);
+}
+
+/** A compact strip listing just the six DC names, draggable into any order.
+ * The cards below re-render to match.
+ *
+ * Deliberately separate from the cards themselves: a DC card carries its whole
+ * task list, so dragging one would mean hauling a tall, scrolling element past
+ * its neighbours. Dragging six short rows in a fixed-height panel is the same
+ * gesture without the wrestling. */
+function renderReorderStrip(): HTMLElement | null {
+  const trials = store.getTrialChecklists();
+  if (trials.length < 2) return null;
+
+  const list = el("div", { class: "dc-reorder-list" });
+  const attachDrag = enableDragReorder(list, {
+    itemSelector: ".dc-reorder-row",
+    order: () => store.getTrialChecklists().map((c) => c.id),
+    onReorder: (orderedIds) => store.reorderTrialChecklists(orderedIds),
+  });
+
+  trials.forEach((checklist, i) => {
+    const enabled = checklist.enabled !== false;
+    const row = el("div", { class: "dc-reorder-row" });
+    row.appendChild(attachDrag(row, checklist.id));
+    row.appendChild(el("span", { class: "dc-reorder-position" }, [String(i + 1)]));
+    row.appendChild(el("span", { class: "dc-reorder-name" }, [checklist.name]));
+    row.appendChild(
+      el("span", { class: "muted small" }, [
+        enabled ? `${checklist.tasks.length} task${checklist.tasks.length === 1 ? "" : "s"}` : "Paused",
+      ])
+    );
+    list.appendChild(row);
+  });
+
+  return el("div", { class: "card" }, [
+    el("h2", {}, ["Order"]),
+    el("p", { class: "muted small" }, ["Drag to rearrange your DCs — the checklists below follow this order."]),
+    list,
   ]);
 }
 
@@ -100,6 +140,8 @@ function render(): void {
   const root = qs<HTMLElement>("#page-root");
   clear(root);
   root.appendChild(renderBulkAddForm());
+  const strip = renderReorderStrip();
+  if (strip) root.appendChild(strip);
   for (const checklist of store.getTrialChecklists()) {
     root.appendChild(renderTrialCard(checklist));
   }

@@ -15,6 +15,7 @@
 import type { Checklist, Difficulty, Task } from "../types.js";
 import { store } from "../data/store.js";
 import { el, clear } from "./dom.js";
+import { enableDragReorder } from "./dragList.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import { announceRewards, celebrate, showToast } from "./toast.js";
 import {
@@ -64,15 +65,12 @@ export function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLEl
 
 export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions = {}): HTMLElement {
   const container = el("div", { class: "card" });
-  let draggedTaskId: string | null = null;
+  /** Set by paint() on every repaint — see enableDragReorder in ui/dragList.ts,
+   * which owns the actual drag wiring shared with the Daily Puzzles and DC
+   * checklist lists. */
+  let attachDrag: ((row: HTMLElement, id: string) => HTMLElement) | null = null;
   paint();
   return container;
-
-  function clearDragIndicators() {
-    container
-      .querySelectorAll(".drag-over-top, .drag-over-bottom")
-      .forEach((el) => el.classList.remove("drag-over-top", "drag-over-bottom"));
-  }
 
   function paint() {
     clear(container);
@@ -115,6 +113,20 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     );
 
     const list = el("div", { class: "task-list", style: "margin-top: 16px;" });
+    attachDrag =
+      todaysTasks.length > 1
+        ? enableDragReorder(list, {
+            itemSelector: ".task-item",
+            // Read live rather than closing over todaysTasks: completed tasks
+            // sink to the bottom, so the on-screen order is what a drop must
+            // reorder against.
+            order: () => [...list.querySelectorAll<HTMLElement>(".task-item")].map((n) => n.dataset.dragId ?? "").filter(Boolean),
+            onReorder: (orderedIds) => {
+              store.reorderTasks(checklist.id, orderedIds);
+              paint();
+            },
+          })
+        : null;
     if (total === 0) {
       list.appendChild(
         el("div", { class: "empty-state" }, [
@@ -126,40 +138,6 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
       list.appendChild(renderTaskRow(task, {}));
     }
     container.appendChild(list);
-
-    if (todaysTasks.length > 1) {
-      list.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-        const targetRow = (e.target as HTMLElement)?.closest(".task-item") as HTMLElement | null;
-        clearDragIndicators();
-        if (!targetRow || !draggedTaskId || targetRow.dataset.taskId === draggedTaskId) return;
-        const rect = targetRow.getBoundingClientRect();
-        const before = e.clientY < rect.top + rect.height / 2;
-        targetRow.classList.add(before ? "drag-over-top" : "drag-over-bottom");
-      });
-      list.addEventListener("drop", (e) => {
-        e.preventDefault();
-        const targetRow = (e.target as HTMLElement)?.closest(".task-item") as HTMLElement | null;
-        clearDragIndicators();
-        if (!draggedTaskId || !targetRow) return;
-        const targetId = targetRow.dataset.taskId;
-        if (!targetId || targetId === draggedTaskId) return;
-        const rect = targetRow.getBoundingClientRect();
-        const before = e.clientY < rect.top + rect.height / 2;
-
-        const orderedIds = todaysTasks.map((t) => t.id);
-        const fromIdx = orderedIds.indexOf(draggedTaskId);
-        if (fromIdx !== -1) orderedIds.splice(fromIdx, 1);
-        let toIdx = orderedIds.indexOf(targetId);
-        if (toIdx === -1) toIdx = orderedIds.length;
-        else if (!before) toIdx += 1;
-        orderedIds.splice(toIdx, 0, draggedTaskId);
-
-        store.reorderTasks(checklist.id, orderedIds);
-        paint();
-      });
-    }
 
     container.appendChild(renderAddForm(isDaily));
 
@@ -182,23 +160,11 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
     } else {
       // Drag-and-drop reordering — only wired up for the main visible list,
       // not the "manage all" section (which is sorted by creation date, a
-      // different order than the checklist's own task order).
+      // different order than the checklist's own task order). A single-task
+      // list has nothing to reorder, so attachDrag is null there and the row
+      // simply gets no handle.
       row.dataset.taskId = task.id;
-      row.draggable = true;
-      row.addEventListener("dragstart", (e) => {
-        draggedTaskId = task.id;
-        row.classList.add("dragging");
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", task.id);
-        }
-      });
-      row.addEventListener("dragend", () => {
-        draggedTaskId = null;
-        row.classList.remove("dragging");
-        clearDragIndicators();
-      });
-      row.appendChild(el("span", { class: "drag-handle", title: "Drag to reorder" }, ["⋮⋮"]));
+      if (attachDrag) row.appendChild(attachDrag(row, task.id));
     }
 
     if (!rowOpts.manageMode) {

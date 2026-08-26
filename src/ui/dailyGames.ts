@@ -8,6 +8,7 @@
 
 import { store } from "../data/store.js";
 import { el } from "./dom.js";
+import { enableDragReorder } from "./dragList.js";
 import { showToast } from "./toast.js";
 import { todayISO } from "../util/date.js";
 import {
@@ -28,7 +29,8 @@ function secondsToParts(total: number): { m: number; s: number } {
 export function renderDailyGamesCard(): HTMLElement {
   const date = todayISO();
   const dg = store.getState().dailyGames;
-  const games = store.getDailyGames();
+  const games = store.getVisibleDailyGames();
+  const hiddenCount = store.getDailyGames().length - games.length;
 
   return el("div", { class: "card" }, [
     el("h2", {}, ["Daily Puzzles"]),
@@ -37,14 +39,21 @@ export function renderDailyGamesCard(): HTMLElement {
     ]),
     games.length === 0
       ? el("div", { class: "empty-state", style: "margin-top:12px;" }, [
-          "No puzzles yet — add one below and it'll show up here to log every day.",
+          hiddenCount > 0
+            ? "Every puzzle is hidden right now — unhide one in Settings to start logging again."
+            : "No puzzles yet — add one in Settings and it'll show up here to log every day.",
         ])
       : el(
           "div",
           { class: "task-list", style: "margin-top: 12px;" },
           games.map((g) => renderGameRow(g, date))
         ),
-    renderManageSection(),
+    el("p", { class: "muted small", style: "margin-top:12px;" }, [
+      "Add, hide, or reorder puzzles on the ",
+      el("a", { href: "settings.html" }, ["Settings"]),
+      " page.",
+      hiddenCount > 0 ? ` ${hiddenCount} hidden.` : "",
+    ]),
   ]);
 }
 
@@ -235,11 +244,14 @@ const SCORING_KINDS: Record<DailyGameScoringKind, ScoringKindMeta> = {
   fewerGuesses: { label: "Guesses — fewer is better", minLabel: "Fewest guesses", maxLabel: "Most guesses", betterEnd: "min", step: "1" },
 };
 
-function renderManageSection(): HTMLElement {
-  return el("div", { class: "puzzle-manage" }, [
-    el("h3", {}, ["Manage puzzles"]),
+/** The full manage UI, as a standalone card for the Settings page. Kept in
+ * this module rather than in pages/settings.ts so it sits next to the logging
+ * UI and the scoring helpers it shares. */
+export function renderManagePuzzlesCard(): HTMLElement {
+  return el("div", { class: "card puzzle-manage" }, [
+    el("h2", {}, ["Daily Puzzles"]),
     el("p", { class: "muted small" }, [
-      "Add a puzzle you've picked up, or remove one you've stopped playing. Removing a puzzle clears its logged history and Personal Record, but every Battlepass point it already earned stays on your season.",
+      "Add a puzzle you've picked up, hide one you're taking a break from, or drag them into the order you like. Hiding keeps every logged day and your Personal Record — only removing throws those away, and even then the Battlepass points it earned stay on your season.",
     ]),
     renderManageList(),
     renderAddPuzzleForm(),
@@ -253,55 +265,89 @@ function renderManageList(): HTMLElement {
     return el("p", { class: "muted small" }, ["Nothing to manage yet."]);
   }
 
-  return el(
-    "div",
-    { class: "puzzle-manage-list" },
-    games.map((config) => {
-      const entryCount = dg.entries.filter((e) => e.gameId === config.id).length;
-      const row = el("div", { class: "puzzle-manage-row" }, [
-        el("div", {}, [
-          el("div", { class: "puzzle-manage-name" }, [config.name]),
-          el("div", { class: "puzzle-manage-rule" }, [describeDailyGameScoring(config, dg)]),
+  const list = el("div", { class: "puzzle-manage-list" });
+  // Same drag behaviour as checklist tasks and the DC strip — see ui/dragList.
+  const attachDrag =
+    games.length > 1
+      ? enableDragReorder(list, {
+          itemSelector: ".puzzle-manage-row",
+          order: () => store.getDailyGames().map((c) => c.id),
+          onReorder: (orderedIds) => store.reorderDailyGames(orderedIds),
+        })
+      : null;
+
+  for (const config of games) {
+    const hidden = !!config.hidden;
+    const entryCount = dg.entries.filter((e) => e.gameId === config.id).length;
+    const row = el("div", { class: `puzzle-manage-row${hidden ? " hidden-puzzle" : ""}` });
+    if (attachDrag) row.appendChild(attachDrag(row, config.id));
+    row.appendChild(
+      el("div", { style: "flex:1; min-width:180px;" }, [
+        el("div", { class: "puzzle-manage-name" }, [
+          config.name,
+          hidden ? el("span", { class: "weekday-tag", style: "margin-left:8px;" }, ["Hidden"]) : null,
         ]),
-      ]);
+        el("div", { class: "puzzle-manage-rule" }, [describeDailyGameScoring(config, dg)]),
+      ])
+    );
 
-      // Two-step confirm, inline rather than a browser confirm() dialog:
-      // removal throws away logged history, so it shouldn't be one stray
-      // click away, but a modal for a puzzle you no longer play is heavy.
-      const actions = el("div", { style: "display:flex; gap:6px; align-items:center;" });
-      const showConfirm = () => {
-        while (actions.firstChild) actions.removeChild(actions.firstChild);
-        actions.appendChild(
-          el("span", { class: "muted small" }, [
-            entryCount > 0 ? `Remove and discard ${entryCount} logged ${entryCount === 1 ? "day" : "days"}?` : "Remove this puzzle?",
-          ])
-        );
-        actions.appendChild(
-          el(
-            "button",
-            {
-              class: "small danger",
-              onclick: () => {
-                if (store.removeDailyGame(config.id)) {
-                  showToast("Puzzle removed", `${config.name} is gone. The points it earned are still yours.`);
-                }
-              },
+    // Two-step confirm, inline rather than a browser confirm() dialog:
+    // removal throws away logged history, so it shouldn't be one stray
+    // click away, but a modal for a puzzle you no longer play is heavy.
+    const actions = el("div", { style: "display:flex; gap:6px; align-items:center; flex-wrap:wrap;" });
+    const showConfirm = () => {
+      while (actions.firstChild) actions.removeChild(actions.firstChild);
+      actions.appendChild(
+        el("span", { class: "muted small" }, [
+          entryCount > 0 ? `Remove and discard ${entryCount} logged ${entryCount === 1 ? "day" : "days"}?` : "Remove this puzzle?",
+        ])
+      );
+      actions.appendChild(
+        el(
+          "button",
+          {
+            class: "small danger",
+            onclick: () => {
+              if (store.removeDailyGame(config.id)) {
+                showToast("Puzzle removed", `${config.name} is gone. The points it earned are still yours.`);
+              }
             },
-            ["Yes, remove"]
-          )
-        );
-        actions.appendChild(el("button", { class: "small ghost", onclick: showDefault }, ["Cancel"]));
-      };
-      const showDefault = () => {
-        while (actions.firstChild) actions.removeChild(actions.firstChild);
-        actions.appendChild(el("button", { class: "small danger ghost", onclick: showConfirm }, ["Remove"]));
-      };
-      showDefault();
+          },
+          ["Yes, remove"]
+        )
+      );
+      actions.appendChild(el("button", { class: "small ghost", onclick: showDefault }, ["Cancel"]));
+    };
+    const showDefault = () => {
+      while (actions.firstChild) actions.removeChild(actions.firstChild);
+      actions.appendChild(
+        el(
+          "button",
+          {
+            class: "small",
+            title: hidden ? "Show this puzzle on the Daily page again" : "Keep this puzzle out of the daily list, without losing its history",
+            onclick: () => {
+              store.setDailyGameHidden(config.id, !hidden);
+              showToast(
+                hidden ? "Puzzle shown" : "Puzzle hidden",
+                hidden
+                  ? `${config.name} is back on the Daily page.`
+                  : `${config.name} is off the daily list. Its history and Personal Record are kept.`
+              );
+            },
+          },
+          [hidden ? "👁 Show" : "🙈 Hide"]
+        )
+      );
+      actions.appendChild(el("button", { class: "small danger ghost", onclick: showConfirm }, ["Remove"]));
+    };
+    showDefault();
 
-      row.appendChild(actions);
-      return row;
-    })
-  );
+    row.appendChild(actions);
+    list.appendChild(row);
+  }
+
+  return list;
 }
 
 function renderAddPuzzleForm(): HTMLElement {

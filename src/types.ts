@@ -325,6 +325,12 @@ export interface DailyGameConfig {
   /** True for the games Metro ships with by default. */
   builtIn: boolean;
   createdAt: string;
+  /** True to keep this puzzle out of the daily logging list without deleting
+   * it. Unlike removing (see Store.removeDailyGame), hiding preserves every
+   * logged day and the Personal Record, so a puzzle you've stopped playing
+   * for now can come back later with its history intact. Absent means
+   * visible, so saves from before this existed are unaffected. */
+  hidden?: boolean;
 }
 
 /** One day's recorded result for one game. At most one per (gameId, date) —
@@ -348,6 +354,8 @@ export interface DailyGamesState {
    * so they feel proportionate to each other and to regular task points. */
   minPoints: number;
   maxPoints: number;
+  /** Display order is this array's own order — reordering the list rewrites
+   * it (see Store.reorderDailyGames) rather than keeping a parallel index. */
   configs: DailyGameConfig[];
   entries: DailyGameEntry[];
   /** Ids of built-in puzzles the user has deliberately removed. Needed
