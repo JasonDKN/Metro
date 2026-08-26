@@ -44,15 +44,17 @@ The Daily General Checklist page has a "Daily Puzzles" card where you can log to
 
 Adding a puzzle asks three things: its name, how it's scored (a score where higher or lower is better, a time in seconds, or a guess count), and the minimum and maximum scores possible. Those bounds anchor the point curve, and the form previews what each end is worth before you commit. Hiding a puzzle keeps every logged day and its Personal Record — only removing discards those, and even then the Battlepass points it earned stay on your season.
 
-Every game's score maps into the same 10–50 point range, calibrated so a great puzzle day feels roughly like clearing a Medium-to-Extreme task, and even a rough day still earns the floor amount:
+Every puzzle's score maps into the same 0–100 point range: a floor-level result earns nothing, a perfect one earns 100, and everything in between scales smoothly. The same range applies to any puzzle you add yourself. Points are still purely additive — a bad day earns zero, it never subtracts — but unlike the original 10–50 range, simply showing up is no longer worth points on its own.
 
-- **Maptap.gg** — raw score 500–1000 scales linearly to 10–50 points (500 or below = floor, 1000 = ceiling).
-- **Wordle** — 1 guess = 50 points, 6 guesses = 10 points, linear in between. A Fail is a special case worth 0 points, since it's a loss rather than just a worse solve.
-- **Minute Cryptic** — since "the best possible score" varies puzzle to puzzle, you enter two numbers each day: your guesses-under-par, and that day's best-possible guesses-under-par. Matching the day's best earns the full 50 points; sitting at or below par earns the floor.
-- **Countries of the World Quiz** — enter your finishing time (or check "Didn't finish / 15:00+"). 10 minutes (600s) or faster earns the full 50 points; 15 minutes or a DNF earns the floor.
-- **18 Words** — raw score 0–18 scales linearly to 10–50 points (0 = floor, 18 = ceiling).
+- **Maptap.gg** — raw score 500–1000 scales linearly to 0–100 points (500 or below = 0, 1000 = 100).
+- **Wordle** — 1 guess = 100 points, 6 guesses = 0, linear in between. A Fail is a separate case with its own value (0 by default), since it's a loss rather than just a worse solve.
+- **Minute Cryptic** — since "the best possible score" varies puzzle to puzzle, you enter two numbers each day: your guesses-under-par, and that day's best-possible guesses-under-par. Matching the day's best earns the full 100 points; sitting at or below par earns 0.
+- **Countries of the World Quiz** — enter your finishing time (or check "Didn't finish / 15:00+"). 10 minutes (600s) or faster earns the full 100 points; 15 minutes or a DNF earns 0.
+- **18 Words** — raw score 0–18 scales linearly to 0–100 points (0 = 0, 18 = 100).
 
-Recording a score again for the same day replaces the previous entry and corrects the points it earned (mirrors how deleting a task revokes its points) — handy for fixing a typo. The scoring patterns behind these four games (a linear score/time range, a guess count with a fail case, and a daily-relative "beat the best possible" range) are reusable, so more games can be added later without new scoring code.
+Each puzzle can also carry a link to where you play it, editable in Settings, which turns the Daily Puzzles card into a launcher — a linked puzzle shows a "Play ↗" button that opens it in a new tab. Only http(s) addresses are accepted, and every link is re-validated at render time rather than trusted from storage.
+
+Recording a score again for the same day replaces the previous entry and corrects the points it earned (mirrors how deleting a task revokes its points) — handy for fixing a typo. The scoring patterns behind these games (a linear score/time range, a guess count with a fail case, and a daily-relative "beat the best possible" range) are reusable, so more games can be added later without new scoring code.
 
 ## How points & the Battlepass work
 

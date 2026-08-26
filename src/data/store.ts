@@ -51,7 +51,16 @@ import {
   SEASONAL_REWARD_ROADMAPS,
   SEASONAL_TIERS,
 } from "./defaults.js";
-import { bestDailyGameEntry, bestDailyGameScore, computeDailyGamePoints, defaultDailyGamesState, findDailyGameEntry } from "./dailyGames.js";
+import {
+  bestDailyGameEntry,
+  bestDailyGameScore,
+  computeDailyGamePoints,
+  DAILY_GAME_MAX_POINTS,
+  DAILY_GAME_MIN_POINTS,
+  defaultDailyGamesState,
+  findDailyGameEntry,
+  normalizeGameUrl,
+} from "./dailyGames.js";
 import { pointsForDifficulty } from "./points.js";
 import { nextRoadmapItem } from "./rewards.js";
 import { activeTasksForChecklist, ALL_WEEKDAYS, tasksActiveOnWeekday, weekdayOfISODate } from "./schedule.js";
@@ -158,6 +167,7 @@ class Store {
     this.removeConsumableRewards();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
+    this.rescaleDailyGamePoints();
     this.removeBadgesCategory();
     this.reconcileTierGrantsWithRoadmap();
     this.dedupeDuplicateTierGrants();
@@ -213,9 +223,20 @@ class Store {
     // newly-shipped built-ins to existing saves — would silently undo every
     // deletion on the next load. See DailyGamesState.removedBuiltInIds.
     const removed = new Set(dg.removedBuiltInIds);
-    for (const config of defaultDailyGamesState().configs) {
+    const seeds = defaultDailyGamesState().configs;
+    for (const config of seeds) {
       if (existingIds.has(config.id) || removed.has(config.id)) continue;
       dg.configs.push(config);
+    }
+    // Built-in puzzles gained a `url` after they'd already shipped, so a save
+    // that predates it has them without one. Backfill only where the field was
+    // never set at all: a link the user explicitly cleared is stored as ""
+    // (see setDailyGameUrl) and must stay cleared.
+    const seedUrlById = new Map(seeds.map((c) => [c.id, c.url]));
+    for (const config of dg.configs) {
+      if (!config.builtIn || config.url !== undefined) continue;
+      const seeded = seedUrlById.get(config.id);
+      if (seeded) config.url = seeded;
     }
   }
 
@@ -1484,6 +1505,30 @@ class Store {
     return this.state.dailyGames.configs.filter((c) => !c.hidden);
   }
 
+  /** Sets (or clears) the link for a puzzle. Returns false if the text isn't
+   * a usable http(s) address, so the caller can say so rather than silently
+   * dropping it; clearing with an empty string always succeeds. */
+  setDailyGameUrl(gameId: string, url: string): boolean {
+    const config = this.state.dailyGames.configs.find((c) => c.id === gameId);
+    if (!config) return false;
+    if (!url.trim()) {
+      // Cleared is stored as "" rather than undefined, so it stays
+      // distinguishable from "never had one" — that's what stops
+      // ensureDailyGames from helpfully putting the seeded link back on a
+      // built-in the user deliberately emptied.
+      if (config.url === "") return true;
+      config.url = "";
+      this.emit();
+      return true;
+    }
+    const normalized = normalizeGameUrl(url);
+    if (!normalized) return false;
+    if (config.url === normalized) return true;
+    config.url = normalized;
+    this.emit();
+    return true;
+  }
+
   /** Hides or unhides a puzzle. Nothing is deleted — its logged days and
    * Personal Record stay exactly where they are, so unhiding restores the
    * puzzle complete with its history. */
@@ -1518,11 +1563,63 @@ class Store {
     return findDailyGameEntry(this.state.dailyGames, gameId, date);
   }
 
+  /** Migrates an existing save to the current shared point range.
+   *
+   * The range moved from 10-50 to 0-100 (see DAILY_GAME_MIN/MAX_POINTS), and
+   * every already-logged day was scored on the old one, with those points
+   * already banked in season and lifetime totals. Rather than leave history
+   * on a mix of scales, each entry is rescored and the difference is applied
+   * to the totals.
+   *
+   * The season/lifetime split matters: `entries` spans every month, but
+   * `seasonPoints` only covers the current one. So the delta from entries
+   * dated inside the current season goes through awardPoints — which credits
+   * both totals and grants any tier the extra points now reach — while the
+   * rest only adjusts lifetimePoints. Crediting the whole delta to
+   * seasonPoints would hand this season points earned back in July.
+   *
+   * Gated on the stored range so it runs once per save and is a no-op
+   * afterwards (and on fresh installs, seeded at the new range already).
+   *
+   * Runs after the roadmap is built, since awardPoints may need to grant a
+   * tier reward. */
+  private rescaleDailyGamePoints(): void {
+    const dg = this.state.dailyGames;
+    if (dg.minPoints === DAILY_GAME_MIN_POINTS && dg.maxPoints === DAILY_GAME_MAX_POINTS) return;
+
+    dg.minPoints = DAILY_GAME_MIN_POINTS;
+    dg.maxPoints = DAILY_GAME_MAX_POINTS;
+
+    const configById = new Map(dg.configs.map((c) => [c.id, c]));
+    const bp = this.state.battlepass;
+    let seasonDelta = 0;
+    let lifetimeDelta = 0;
+
+    for (const entry of dg.entries) {
+      const config = configById.get(entry.gameId);
+      if (!config) continue; // no config to rescore against; leave it alone
+      const before = entry.pointsAwarded;
+      const after = computeDailyGamePoints(config, entry, dg);
+      if (after === before) continue;
+      entry.pointsAwarded = after;
+      lifetimeDelta += after - before;
+      // entry.date is YYYY-MM-DD, so its first 7 characters are its monthKey.
+      if (entry.date.slice(0, 7) === bp.currentMonthKey) seasonDelta += after - before;
+    }
+
+    const lifetimeOnly = lifetimeDelta - seasonDelta;
+    if (lifetimeOnly !== 0) {
+      bp.lifetimePoints = Math.max(0, bp.lifetimePoints + lifetimeOnly);
+    }
+    if (seasonDelta > 0) this.awardPoints(seasonDelta, [], []);
+    else if (seasonDelta < 0) this.revokePoints(-seasonDelta);
+  }
+
   /** Adds a user-defined puzzle to the Daily Puzzles list. Returns null (and
    * changes nothing) if the name is blank or already taken — the caller shows
    * the reason, since a silently-ignored submit is worse than a message.
    * Name matching is case-insensitive so "wordle" can't shadow "Wordle". */
-  addDailyGame(name: string, scoring: DailyGameScoring): DailyGameConfig | null {
+  addDailyGame(name: string, scoring: DailyGameScoring, url?: string): DailyGameConfig | null {
     const trimmed = name.trim();
     if (!trimmed) return null;
     const dg = this.state.dailyGames;
@@ -1534,6 +1631,7 @@ class Store {
       scoring,
       builtIn: false,
       createdAt: new Date().toISOString(),
+      url: url ? normalizeGameUrl(url) ?? undefined : undefined,
     };
     dg.configs.push(config);
     this.emit();
@@ -1687,6 +1785,7 @@ class Store {
       this.removeConsumableRewards();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();
+      this.rescaleDailyGamePoints();
       this.removeBadgesCategory();
       this.reconcileTierGrantsWithRoadmap();
       this.dedupeDuplicateTierGrants();

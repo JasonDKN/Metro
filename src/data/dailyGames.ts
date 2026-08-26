@@ -2,17 +2,24 @@
 // Daily Puzzles — scoring math + default game configs.
 //
 // Every game's raw daily input scales into the same shared point range
-// (DailyGamesState.minPoints..maxPoints, 10-50 by default) so a great puzzle
-// day feels roughly as rewarding as clearing a Medium/Hard task, and a
-// mediocre one still earns something — consistent with the rest of Metro's
-// "no penalties, purely additive" points philosophy (a bad score still lands
-// at the floor, never below it, except Wordle's explicit fail case).
+// (DailyGamesState.minPoints..maxPoints, 0-100 by default) so a great puzzle
+// day is worth roughly two Extreme tasks and a floor-level day is worth
+// nothing. Still additive rather than punitive — a bad score earns zero, it
+// never subtracts — but unlike the original 10-50 range, simply showing up
+// is no longer worth points on its own.
 //
 // Adding a new game later just means picking whichever DailyGameScoring
 // pattern fits (see types.ts) and appending a config — no new scoring code.
 // ============================================================================
 
 import type { DailyGameConfig, DailyGameEntry, DailyGameScoring, DailyGamesState } from "../types.js";
+
+/** The shared point range every puzzle's score maps into. Kept here as the
+ * single source of truth: defaultDailyGamesState seeds new saves with it, and
+ * Store.rescaleDailyGamePoints migrates existing saves to it, so there is no
+ * second place to update if it ever changes again. */
+export const DAILY_GAME_MIN_POINTS = 0;
+export const DAILY_GAME_MAX_POINTS = 100;
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -61,12 +68,13 @@ export function computeDailyGamePoints(
 export function defaultDailyGamesState(): DailyGamesState {
   const now = new Date().toISOString();
   return {
-    minPoints: 10,
-    maxPoints: 50,
+    minPoints: DAILY_GAME_MIN_POINTS,
+    maxPoints: DAILY_GAME_MAX_POINTS,
     configs: [
       {
         id: "game-minute-cryptic",
         name: "Minute Cryptic",
+        url: "https://www.minutecryptic.com/",
         scoring: { method: "underParDailyBest" },
         builtIn: true,
         createdAt: now,
@@ -74,6 +82,7 @@ export function defaultDailyGamesState(): DailyGamesState {
       {
         id: "game-maptap",
         name: "Maptap.gg",
+        url: "https://maptap.gg/",
         scoring: { method: "linearRange", worst: 500, best: 1000, unit: "score" },
         builtIn: true,
         createdAt: now,
@@ -81,6 +90,7 @@ export function defaultDailyGamesState(): DailyGamesState {
       {
         id: "game-wordle",
         name: "Wordle",
+        url: "https://www.nytimes.com/games/wordle/index.html",
         scoring: { method: "guessCount", bestGuesses: 1, worstGuesses: 6, failPoints: 0 },
         builtIn: true,
         createdAt: now,
@@ -88,11 +98,15 @@ export function defaultDailyGamesState(): DailyGamesState {
       {
         id: "game-countries-quiz",
         name: "Countries of the World Quiz",
+        url: "https://www.sporcle.com/games/g/world",
         scoring: { method: "linearRange", worst: 900, best: 600, unit: "seconds" },
         builtIn: true,
         createdAt: now,
       },
       {
+        // No seeded link: several unrelated sites publish an "18 Words" daily
+        // puzzle and none could be confirmed as the one this refers to, so
+        // it's left blank rather than pointing somewhere that might be wrong.
         id: "game-18-words",
         name: "18 Words",
         scoring: { method: "linearRange", worst: 0, best: 18, unit: "score" },
@@ -296,4 +310,37 @@ export function describeDailyGameScoring(
   const lo = Math.min(scoring.worst, scoring.best);
   const hi = Math.max(scoring.worst, scoring.best);
   return `${lo}${unit}–${hi}${unit} → ${pts} (${lowerIsBetter ? "lower" : "higher"} is better)`;
+}
+
+// ---------------------------------------------------------------------------
+// Puzzle links
+// ---------------------------------------------------------------------------
+
+/** Cleans up a user-typed puzzle link, or returns null if it isn't usable.
+ *
+ * Only http(s) survives. That restriction is the point: these strings end up
+ * as the href of a link the user clicks, so allowing an arbitrary scheme
+ * would let `javascript:` (or `data:`) run in the page. Anything without a
+ * scheme is assumed to be https rather than rejected, since "maptap.gg" is
+ * what people actually type. */
+export function normalizeGameUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (!url.hostname) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** True if a stored link is safe to render as an href. Stored links already
+ * went through normalizeGameUrl, but state can also arrive from an imported
+ * backup file or a hand-edited localStorage entry, so every render site
+ * re-checks rather than trusting what's on disk. */
+export function isSafeGameUrl(url: string | undefined): url is string {
+  return !!url && normalizeGameUrl(url) !== null;
 }

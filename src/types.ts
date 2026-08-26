@@ -325,6 +325,12 @@ export interface DailyGameConfig {
   /** True for the games Metro ships with by default. */
   builtIn: boolean;
   createdAt: string;
+  /** Where to play this puzzle. Shown as an "Open" link on the Daily Puzzles
+   * card so the page doubles as a launcher. Always http(s) — see
+   * normalizeGameUrl, which is what writes this field — and re-validated at
+   * every render site, since state can also arrive from an imported backup.
+   * Absent means no link, which just renders no button. */
+  url?: string;
   /** True to keep this puzzle out of the daily logging list without deleting
    * it. Unlike removing (see Store.removeDailyGame), hiding preserves every
    * logged day and the Personal Record, so a puzzle you've stopped playing

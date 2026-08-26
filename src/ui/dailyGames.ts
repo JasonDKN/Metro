@@ -16,6 +16,8 @@ import {
   computeDailyGamePoints,
   describeDailyGameScoring,
   formatDailyGameRawValue,
+  isSafeGameUrl,
+  normalizeGameUrl,
 } from "../data/dailyGames.js";
 import type { DailyGameScoringKind } from "../data/dailyGames.js";
 import type { DailyGameConfig, DailyGameEntry } from "../types.js";
@@ -35,7 +37,7 @@ export function renderDailyGamesCard(): HTMLElement {
   return el("div", { class: "card" }, [
     el("h2", {}, ["Daily Puzzles"]),
     el("p", { class: "muted small" }, [
-      `Log today's score for each puzzle — points scale from ${dg.minPoints} to ${dg.maxPoints}, roughly matching a Medium-to-Extreme task.`,
+      `Log today's score for each puzzle — a floor result earns ${dg.minPoints}, a perfect one earns ${dg.maxPoints}, and everything in between scales smoothly. Puzzles with a link show a Play button.`,
     ]),
     games.length === 0
       ? el("div", { class: "empty-state", style: "margin-top:12px;" }, [
@@ -80,7 +82,25 @@ function renderGameRow(config: DailyGameConfig, date: string): HTMLElement {
 
   return el("div", { class: "task-item puzzle-row" }, [
     el("div", { style: "display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:6px;" }, [
-      el("strong", { style: "font-size:14px;" }, [config.name]),
+      el("div", { style: "display:flex; align-items:center; gap:8px; flex-wrap:wrap;" }, [
+        el("strong", { style: "font-size:14px;" }, [config.name]),
+        // Re-checked here rather than trusted from storage — an imported
+        // backup or hand-edited save could carry anything, and this string
+        // becomes an href.
+        isSafeGameUrl(config.url)
+          ? el(
+              "a",
+              {
+                class: "puzzle-open-link",
+                href: config.url,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                title: `Open ${config.name} in a new tab`,
+              },
+              ["Play ↗"]
+            )
+          : null,
+      ]),
       el("div", { style: "display:flex; gap:6px; align-items:center;" }, [
         bestEntry !== null
           ? el("span", { class: "weekday-tag record-tag" }, [`🏆 Personal Record: ${formatDailyGameRawValue(config, bestEntry)}`])
@@ -251,7 +271,7 @@ export function renderManagePuzzlesCard(): HTMLElement {
   return el("div", { class: "card puzzle-manage" }, [
     el("h2", {}, ["Daily Puzzles"]),
     el("p", { class: "muted small" }, [
-      "Add a puzzle you've picked up, hide one you're taking a break from, or drag them into the order you like. Hiding keeps every logged day and your Personal Record — only removing throws those away, and even then the Battlepass points it earned stay on your season.",
+      "Add a puzzle you've picked up, hide one you're taking a break from, or drag them into the order you like. Give a puzzle a link and the Daily page shows a Play button for it. Hiding keeps every logged day and your Personal Record — only removing throws those away, and even then the Battlepass points it earned stay on your season.",
     ]),
     renderManageList(),
     renderAddPuzzleForm(),
@@ -281,13 +301,34 @@ function renderManageList(): HTMLElement {
     const entryCount = dg.entries.filter((e) => e.gameId === config.id).length;
     const row = el("div", { class: `puzzle-manage-row${hidden ? " hidden-puzzle" : ""}` });
     if (attachDrag) row.appendChild(attachDrag(row, config.id));
+    const urlInput = el("input", {
+      type: "text",
+      class: "puzzle-url-input",
+      placeholder: "Link to play (optional)",
+      value: config.url ?? "",
+    }) as HTMLInputElement;
+    const saveUrl = () => {
+      if (urlInput.value === (config.url ?? "")) return;
+      if (store.setDailyGameUrl(config.id, urlInput.value)) {
+        showToast(urlInput.value.trim() ? "Link saved" : "Link cleared", config.name);
+      } else {
+        showToast("That link didn't look right", "Use a web address like maptap.gg or https://example.com.");
+        urlInput.value = config.url ?? "";
+      }
+    };
+    urlInput.addEventListener("blur", saveUrl);
+    urlInput.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") urlInput.blur();
+    });
+
     row.appendChild(
-      el("div", { style: "flex:1; min-width:180px;" }, [
+      el("div", { style: "flex:1; min-width:200px;" }, [
         el("div", { class: "puzzle-manage-name" }, [
           config.name,
           hidden ? el("span", { class: "weekday-tag", style: "margin-left:8px;" }, ["Hidden"]) : null,
         ]),
         el("div", { class: "puzzle-manage-rule" }, [describeDailyGameScoring(config, dg)]),
+        urlInput,
       ])
     );
 
@@ -354,6 +395,7 @@ function renderAddPuzzleForm(): HTMLElement {
   const dg = store.getState().dailyGames;
 
   const nameInput = el("input", { type: "text", placeholder: "e.g. Connections" }) as HTMLInputElement;
+  const urlInput = el("input", { type: "text", placeholder: "e.g. nytimes.com/games/connections" }) as HTMLInputElement;
   const kindSelect = el(
     "select",
     {},
@@ -442,7 +484,11 @@ function renderAddPuzzleForm(): HTMLElement {
       showToast("Check the scores", built.error);
       return;
     }
-    const added = store.addDailyGame(name, built.scoring);
+    if (urlInput.value.trim() && !normalizeGameUrl(urlInput.value)) {
+      showToast("Check the link", "Use a web address like maptap.gg or https://example.com — or leave it blank.");
+      return;
+    }
+    const added = store.addDailyGame(name, built.scoring, urlInput.value);
     if (!added) {
       showToast("Already have that one", `A puzzle called "${name}" is already in your list.`);
       return;
@@ -456,6 +502,7 @@ function renderAddPuzzleForm(): HTMLElement {
     el("h3", { style: "margin-top:4px;" }, ["Add a puzzle"]),
     el("div", { class: "inline-form" }, [
       el("div", { class: "field" }, [el("label", {}, ["Puzzle name"]), nameInput]),
+      el("div", { class: "field" }, [el("label", {}, ["Link to play (optional)"]), urlInput]),
       el("div", { class: "field", style: "flex: 0 0 260px;" }, [el("label", {}, ["How is it scored?"]), kindSelect]),
       minField,
       maxField,
