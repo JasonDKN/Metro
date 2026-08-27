@@ -133,10 +133,20 @@ function renderRewardPool(): HTMLElement {
       cat.description ? el("p", { class: "muted small" }, [cat.description]) : null,
       el(
         "div",
-        { class: "reward-grid" },
+        { class: "pool-list" },
         cat.items.map((item) => {
           const owned = item.kind === "consumable" || unlockedUnlockIds.has(item.id);
-          return el("div", { class: "reward-chip", style: owned ? "" : "opacity:0.5;" }, [
+          const promisedAt = store.roadmapTierForItem(item.id);
+          // Where this reward stands: earned already, waiting at a tier, or
+          // attached to nothing at all. That last one is the useful signal —
+          // an unassigned item is usually a leftover, and without saying so
+          // the pool just looks like it has mystery duplicates in it.
+          const status = owned
+            ? { text: "Earned", cls: "earned" }
+            : promisedAt !== null
+              ? { text: `Tier ${promisedAt}`, cls: "promised" }
+              : { text: "Unassigned", cls: "unassigned" };
+          return el("div", { class: `pool-row${owned ? " owned" : ""}` }, [
             rewardVisual(cat.id, item.id, item.description, {
               imageDataUrl: item.imageDataUrl,
               revealed: owned,
@@ -144,13 +154,13 @@ function renderRewardPool(): HTMLElement {
               subtitle: rarityLabel(item.rarity),
               caption: item.flavorText,
             }),
-            el("div", { style: "flex:1;" }, [
-              el("div", { class: "name" }, [item.name + (owned ? " ✓" : "")]),
+            el("div", { style: "flex:1; min-width:150px;" }, [
+              el("div", { class: "name" }, [item.name]),
               el("div", { class: `rarity-${item.rarity}` }, [rarityLabel(item.rarity), item.kind === "consumable" ? " · consumable" : ""]),
-              item.flavorText && owned ? el("div", { class: "muted small", style: "margin-top:2px;" }, [item.flavorText]) : null,
               cat.id === "cat-photocards" ? renderPhotoUploadControl(cat.id, item.id, !!item.imageDataUrl) : null,
-              el("button", { class: "small danger ghost", style: "margin-top:4px;", onclick: () => store.deleteRewardItem(cat.id, item.id) }, ["Remove"]),
             ]),
+            el("span", { class: `pool-status ${status.cls}` }, [status.text]),
+            el("button", { class: "small danger ghost", onclick: () => store.deleteRewardItem(cat.id, item.id) }, ["Remove"]),
           ]);
         })
       ),
@@ -161,7 +171,7 @@ function renderRewardPool(): HTMLElement {
   return el("div", { class: "card" }, [
     el("h2", {}, ["Reward Pool"]),
     el("p", { class: "muted small" }, [
-      "Each tier grants one specific reward from this pool, assigned in ascending rarity order — see the Tier Track above for exactly what's coming (Photocards are the one exception: the name shows, but the photo itself stays hidden until you actually unlock it). Add new categories or items any time; it never affects what you've already unlocked, and new items become available to fill any tier that's still waiting on one.",
+      "Everything a tier could ever grant, and where each one currently stands — already earned, waiting at a particular tier, or attached to no tier at all. This is the workbench rather than the trophy case: what you've actually unlocked is listed under Unlocked Rewards above, and appears here too so you can still edit it. Add categories or items any time; it never affects what you've already unlocked, and an unassigned item is available to fill any tier still waiting on one. (Photocards show their name here but keep the photo hidden until the tier is really reached.)",
     ]),
     ...categoryBlocks,
     renderAddCategoryForm(),

@@ -50,7 +50,39 @@ import {
   DEFAULT_TIERS,
   SEASONAL_REWARD_ROADMAPS,
   SEASONAL_TIERS,
+  STUDY_AVATARS,
+  STUDY_BACKGROUNDS,
+  STUDY_CHECKBOXES,
+  STUDY_EFFECTS,
+  STUDY_FONTS,
+  STUDY_THEMES,
+  STUDY_TITLES,
 } from "./defaults.js";
+
+/** The category-specific fields a new reward can carry, kept as one bag
+ * rather than growing addRewardItem's argument list once per category. */
+export interface RewardExtras {
+  imageDataUrl?: string;
+  colors?: [string, string];
+  effectAnimation?: string;
+  fontFamily?: string;
+  backgroundPattern?: string;
+}
+
+/** Shape of the Study Season seed lists in defaults.ts. Declared here rather
+ * than exported from there because the seeding loop below is its only
+ * consumer. */
+interface StudySeed {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  flavorText: string;
+  description?: string;
+  colors?: [string, string];
+  effectAnimation?: string;
+  fontFamily?: string;
+  backgroundPattern?: string;
+}
 import {
   bestDailyGameEntry,
   bestDailyGameScore,
@@ -163,7 +195,9 @@ class Store {
     this.ensureDailyGames();
     this.ensurePhotocardAlbum();
     this.ensureSeasonalTierLadder();
+    this.pruneOrphanedRoadmapEntries();
     this.ensureBtsRewardPack();
+    this.ensureStudySeasonPack();
     this.removeConsumableRewards();
     this.ensureRewardRoadmap();
     this.syncUpcomingTiersToCuratedRoadmap();
@@ -324,6 +358,59 @@ class Store {
     if (!this.state.photocardAlbum) {
       this.state.photocardAlbum = defaultPhotocardAlbum();
     }
+  }
+
+  /** Seeds the Study Season pack: the three new reward categories (Fonts,
+   * Backgrounds, Checkbox Styles) plus September's themes, titles, avatars
+   * and effects.
+   *
+   * Same additive contract as ensureBtsRewardPack — matched by id, only ever
+   * adding what's missing, so it's safe on every load and never resurrects
+   * something the user deleted (unless the whole category went with it, which
+   * is treated like any other user deletion: left alone). Putting items in
+   * the pool grants nothing by itself; only SEASONAL_REWARD_ROADMAPS decides
+   * when they become reachable. Must run before ensureRewardRoadmap so
+   * September's tiers can find them. */
+  private ensureStudySeasonPack(): void {
+    const bp = this.state.battlepass;
+
+    const ensureCategory = (id: string, name: string, description: string) => {
+      if (bp.categories.some((c) => c.id === id)) return;
+      bp.categories.push({ id, name, description, builtIn: true, items: [] });
+    };
+
+    const seedInto = (categoryId: string, seeds: StudySeed[]) => {
+      const cat = bp.categories.find((c) => c.id === categoryId);
+      if (!cat) return;
+      for (const seed of seeds) {
+        if (cat.items.some((i) => i.id === seed.id)) continue;
+        cat.items.push({
+          id: seed.id,
+          categoryId,
+          name: seed.name,
+          description: seed.description,
+          flavorText: seed.flavorText,
+          rarity: seed.rarity,
+          kind: "unlock",
+          colors: seed.colors,
+          effectAnimation: seed.effectAnimation,
+          fontFamily: seed.fontFamily,
+          backgroundPattern: seed.backgroundPattern,
+        });
+      }
+    };
+
+    ensureCategory("cat-fonts", "Fonts", "The typeface the whole app is set in.");
+    ensureCategory("cat-backgrounds", "Backgrounds", "A texture behind the cards. Layers under whichever theme you have on.");
+    ensureCategory("cat-checkboxes", "Checkbox Styles", "The mark that lands when you complete a task.");
+
+    seedInto("cat-fonts", STUDY_FONTS);
+    seedInto("cat-backgrounds", STUDY_BACKGROUNDS);
+    seedInto("cat-checkboxes", STUDY_CHECKBOXES);
+    seedInto("cat-themes", STUDY_THEMES);
+    seedInto("cat-avatars", STUDY_AVATARS);
+    seedInto("cat-titles", STUDY_TITLES);
+    seedInto("cat-effects", STUDY_EFFECTS);
   }
 
   /** Re-syncs the tier ladder when the current season's scheduled ladder
@@ -843,6 +930,14 @@ class Store {
     if (s.activeEffectId && !this.isRewardEarned("cat-effects", s.activeEffectId)) {
       s.activeEffectId = null;
     }
+    // The three Study Season slots. Also normalises a save from before they
+    // existed, where the fields are absent rather than null.
+    if (s.activeFontId && !this.isRewardEarned("cat-fonts", s.activeFontId)) s.activeFontId = null;
+    if (s.activeBackgroundId && !this.isRewardEarned("cat-backgrounds", s.activeBackgroundId)) s.activeBackgroundId = null;
+    if (s.activeCheckboxId && !this.isRewardEarned("cat-checkboxes", s.activeCheckboxId)) s.activeCheckboxId = null;
+    if (s.activeFontId === undefined) s.activeFontId = null;
+    if (s.activeBackgroundId === undefined) s.activeBackgroundId = null;
+    if (s.activeCheckboxId === undefined) s.activeCheckboxId = null;
   }
 
   /** One-time rename for existing saves: only touches the primary checklist
@@ -1032,6 +1127,31 @@ class Store {
   /** null means "use the built-in default confetti burst" — always
    * allowed, since that's the celebration everyone gets before earning
    * anything. Any specific effect id must actually be earned first. */
+  /** Equips a Font, Background or Checkbox Style. null means "Metro's
+   * built-in look" for that slot — the app had a typeface, a plain ground and
+   * a checkmark long before these were earnable, and null restores exactly
+   * that rather than leaving the slot empty. */
+  setActiveFont(fontId: string | null): void {
+    // Refuses anything not actually earned, matching setActiveEffect — the UI
+    // only offers Equip on owned rewards, but the guard belongs on the store
+    // so an unearned reward can't be equipped by any other route either.
+    if (fontId && !this.isRewardEarned("cat-fonts", fontId)) return;
+    this.state.settings.activeFontId = fontId;
+    this.emit();
+  }
+
+  setActiveBackground(backgroundId: string | null): void {
+    if (backgroundId && !this.isRewardEarned("cat-backgrounds", backgroundId)) return;
+    this.state.settings.activeBackgroundId = backgroundId;
+    this.emit();
+  }
+
+  setActiveCheckbox(checkboxId: string | null): void {
+    if (checkboxId && !this.isRewardEarned("cat-checkboxes", checkboxId)) return;
+    this.state.settings.activeCheckboxId = checkboxId;
+    this.emit();
+  }
+
   setActiveEffect(effectId: string | null): void {
     if (effectId && !this.isRewardEarned("cat-effects", effectId)) return;
     this.state.settings.activeEffectId = effectId;
@@ -1049,8 +1169,70 @@ class Store {
     // Marks the ladder as the user's own, so ensureSeasonalTierLadder stops
     // treating it as a stale copy of the season's and resetting it.
     this.state.battlepass.tiersCustomized = true;
+    this.pruneOrphanedRoadmapEntries();
     this.ensureRewardRoadmap();
     this.emit();
+  }
+
+  /** Drops roadmap entries pointing at tiers that no longer exist.
+   *
+   * Shortening the ladder used to leave the removed tier's entry behind, and
+   * because setTierReward refuses an item already promised somewhere else,
+   * that dead entry made its reward permanently unassignable: the tier was
+   * gone from every screen, but the reward it held was still spoken for. The
+   * only way out was to invent a replacement reward, which is how a pool
+   * fills up with near-identical Photocards nobody remembers creating.
+   *
+   * Runs on load as well as after every ladder edit, so a save already
+   * carrying orphans from that bug repairs itself and frees the rewards.
+   * Idempotent. */
+  private pruneOrphanedRoadmapEntries(): void {
+    const bp = this.state.battlepass;
+    const liveTiers = new Set(bp.tiers.map((t) => t.tier));
+    bp.rewardRoadmap = bp.rewardRoadmap.filter((r) => liveTiers.has(r.tier));
+  }
+
+  /** Removes one tier and renumbers what's left, carrying each surviving
+   * tier's reward with it.
+   *
+   * The renumbering is the reason this exists rather than the caller just
+   * filtering and calling updateTiers: tier numbers are positional, so
+   * deleting tier 25 turns 26 into 25, 27 into 26 and so on — but the roadmap
+   * is keyed by that same number, so without remapping, every reward above
+   * the deleted tier would silently shift down onto the wrong tier.
+   *
+   * Refuses a tier already reached; its reward was really granted, and
+   * renumbering underneath a recorded grant would desynchronise history.
+   * Since only tiers above currentTier can go, the reached ones keep their
+   * numbers and their `unlocked` records stay aligned. */
+  removeTier(tier: number): boolean {
+    const bp = this.state.battlepass;
+    if (tier <= bp.currentTier) return false;
+    if (!bp.tiers.some((t) => t.tier === tier)) return false;
+
+    const ordered = [...bp.tiers].sort((a, b) => a.tier - b.tier);
+    const entryByTier = new Map(bp.rewardRoadmap.map((r) => [r.tier, r]));
+    const remaining = ordered.filter((t) => t.tier !== tier);
+
+    const nextRoadmap: RewardRoadmapEntry[] = [];
+    remaining.forEach((t, i) => {
+      const entry = entryByTier.get(t.tier);
+      if (entry) nextRoadmap.push({ ...entry, tier: i + 1 });
+    });
+
+    bp.tiers = remaining.map((t, i) => ({ tier: i + 1, pointsRequired: t.pointsRequired }));
+    bp.rewardRoadmap = nextRoadmap.sort((a, b) => a.tier - b.tier);
+    bp.tiersCustomized = true;
+    this.ensureRewardRoadmap();
+    this.emit();
+    return true;
+  }
+
+  /** Which tier currently promises this reward, or null if none does. Lets
+   * the Reward Pool show where each item is actually used — and, just as
+   * usefully, which items are spoken for by nothing at all. */
+  roadmapTierForItem(itemId: string): number | null {
+    return this.state.battlepass.rewardRoadmap.find((r) => r.itemId === itemId)?.tier ?? null;
   }
 
   // ---------------------------------------------------------------------
@@ -1417,7 +1599,7 @@ class Store {
     rarity: Rarity,
     kind: RewardKind,
     description = "",
-    extras: { imageDataUrl?: string; colors?: [string, string]; effectAnimation?: string } = {}
+    extras: RewardExtras = {}
   ): RewardItem | null {
     const cat = this.state.battlepass.categories.find((c) => c.id === categoryId);
     if (!cat || !name.trim()) return null;
@@ -1429,6 +1611,8 @@ class Store {
       imageDataUrl: extras.imageDataUrl,
       colors: extras.colors,
       effectAnimation: extras.effectAnimation,
+      fontFamily: extras.fontFamily,
+      backgroundPattern: extras.backgroundPattern,
       rarity,
       kind,
     };
@@ -1885,7 +2069,9 @@ class Store {
       this.ensureDailyGames();
       this.ensurePhotocardAlbum();
       this.ensureSeasonalTierLadder();
+      this.pruneOrphanedRoadmapEntries();
       this.ensureBtsRewardPack();
+      this.ensureStudySeasonPack();
       this.removeConsumableRewards();
       this.ensureRewardRoadmap();
       this.syncUpcomingTiersToCuratedRoadmap();

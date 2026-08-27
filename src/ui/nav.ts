@@ -5,7 +5,7 @@
 
 import { store } from "../data/store.js";
 import { el, clear, qs } from "./dom.js";
-import { defaultRewardCategories } from "../data/defaults.js";
+import { BACKGROUND_PATTERNS, defaultRewardCategories, FONT_STACKS } from "../data/defaults.js";
 
 export type PageId = "daily" | "trials" | "checklists" | "shortcuts" | "battlepass" | "inventory" | "photocardAlbum" | "settings";
 
@@ -31,7 +31,8 @@ function avatarEmoji(avatarId: string): string {
 
 function applyTheme(): void {
   const state = store.getState();
-  const themeId = state.settings.activeThemeId;
+  const s = state.settings;
+  const themeId = s.activeThemeId;
   document.body.setAttribute("data-theme", themeId);
 
   // Built-in themes get their whole palette from a body[data-theme="..."]
@@ -49,6 +50,28 @@ function applyTheme(): void {
     document.body.style.removeProperty("--accent");
     document.body.style.removeProperty("--accent-2");
   }
+
+  // Font, background and checkbox style are the same idea as the theme: an id
+  // on <body> that a rule in styles.css keys off. The lookups go through
+  // FONT_STACKS / BACKGROUND_PATTERNS rather than trusting the stored value,
+  // so an unrecognised id falls back to Metro's built-in look instead of
+  // writing something arbitrary into a style declaration.
+  const itemIn = (categoryId: string, itemId: string | null) =>
+    itemId
+      ? state.battlepass.categories.find((c) => c.id === categoryId)?.items.find((i) => i.id === itemId)
+      : undefined;
+
+  const fontStack = FONT_STACKS[itemIn("cat-fonts", s.activeFontId)?.fontFamily ?? ""];
+  if (fontStack) document.body.style.setProperty("--font", fontStack);
+  else document.body.style.removeProperty("--font");
+
+  const pattern = itemIn("cat-backgrounds", s.activeBackgroundId)?.backgroundPattern;
+  if (pattern && BACKGROUND_PATTERNS.includes(pattern)) document.body.setAttribute("data-background", pattern);
+  else document.body.removeAttribute("data-background");
+
+  const checkbox = itemIn("cat-checkboxes", s.activeCheckboxId);
+  if (checkbox) document.body.setAttribute("data-checkbox", checkbox.id);
+  else document.body.removeAttribute("data-checkbox");
 }
 
 export function mountNav(active: PageId): void {

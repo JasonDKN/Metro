@@ -77,6 +77,15 @@ export function celebrate(): void {
     case "effect-bangtan-flash":
       bangtanBombFlash(layer);
       break;
+    case "effect-paper-confetti":
+      paperConfetti(layer);
+      break;
+    case "effect-ink-bloom":
+      inkBloom(layer);
+      break;
+    case "effect-page-turn":
+      pageTurn(layer);
+      break;
     case "effect-confetti":
     default:
       confettiBurst(layer);
@@ -221,6 +230,56 @@ function bangtanBombFlash(layer: HTMLElement, flashCount = 12): void {
       setTimeout(() => flash.remove(), 260);
     }, i * 130 + Math.random() * 90);
   }
+}
+
+/** Torn paper scraps and hole-punch dots drifting down — the confetti burst
+ * rendered in stationery. Deliberately slower and less saturated than
+ * confettiBurst: paper falls, it doesn't fly. Part of the Study Season pack. */
+function paperConfetti(layer: HTMLElement, pieceCount = 70): void {
+  const papers = ["#f3efe4", "#e8e2d2", "#dcd5c2", "#fbf8f0", "#cfc7b2"];
+  for (let i = 0; i < pieceCount; i++) {
+    const isDot = i % 4 === 0;
+    const piece = el("div", {
+      class: isDot ? "paper-dot" : "paper-scrap",
+      style: `left:${Math.random() * 100}%; background:${papers[i % papers.length]}; --spin:${
+        Math.random() * 720 - 360
+      }deg; animation-duration:${2.6 + Math.random() * 1.8}s; animation-delay:${Math.random() * 0.5}s;`,
+    });
+    layer.appendChild(piece);
+    setTimeout(() => piece.remove(), 5200);
+  }
+}
+
+/** A drop of ink landing and spreading out through the page — one slow
+ * expanding stain plus a few smaller satellites. The quietest effect in the
+ * set, and the only one that isn't confetti-shaped. Part of the Study Season
+ * pack. */
+function inkBloom(layer: HTMLElement, blotCount = 5): void {
+  for (let i = 0; i < blotCount; i++) {
+    setTimeout(() => {
+      const size = i === 0 ? 360 : 90 + Math.random() * 110;
+      const blot = el("div", {
+        class: "ink-blot",
+        style: `left:${i === 0 ? 50 : 20 + Math.random() * 60}%; top:${
+          i === 0 ? 45 : 25 + Math.random() * 50
+        }%; width:${size}px; height:${size}px;`,
+      });
+      layer.appendChild(blot);
+      setTimeout(() => blot.remove(), 2600);
+    }, i * 190);
+  }
+}
+
+/** The whole screen turns over like a sheet of paper. A single sweeping
+ * element rather than particles, so it reads as one deliberate gesture —
+ * fitting for the epic tier. Part of the Study Season pack. */
+function pageTurn(layer: HTMLElement): void {
+  const page = el("div", { class: "page-turn" });
+  layer.appendChild(page);
+  setTimeout(() => page.remove(), 1300);
+  const edge = el("div", { class: "page-turn-edge" });
+  layer.appendChild(edge);
+  setTimeout(() => edge.remove(), 1300);
 }
 
 /** The grand finale — a bigger confetti burst plus a couple of firework

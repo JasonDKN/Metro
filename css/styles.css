@@ -107,6 +107,165 @@ body[data-theme="theme-i-purple-you"] {
   --text-muted: #b9a3d9;
 }
 
+/* ---- Study Season themes (September 2026) --------------------------------- */
+body[data-theme="theme-foolscap"] {
+  --bg: #201c15;
+  --bg-elevated: #2b251b;
+  --bg-card: #342c20;
+  --border: #4d4130;
+  --accent: #8a6a3b;
+  --accent-2: #b08d55;
+}
+body[data-theme="theme-blueprint"] {
+  --bg: #071523;
+  --bg-elevated: #0d2032;
+  --bg-card: #112a41;
+  --border: #1e4666;
+  --accent: #4aa3d8;
+  --accent-2: #7ec8e8;
+}
+body[data-theme="theme-fountain-pen"] {
+  --bg: #0b1020;
+  --bg-elevated: #131a2f;
+  --bg-card: #19213c;
+  --border: #2a355c;
+  --accent: #6b8cd6;
+  --accent-2: #c9a227;
+}
+body[data-theme="theme-midnight-oil"] {
+  --bg: #08070a;
+  --bg-elevated: #100e12;
+  --bg-card: #17141a;
+  --border: #2b2530;
+  --accent: #f0a850;
+  --accent-2: #c9772f;
+}
+
+/* ---- Background patterns (Study Season) -----------------------------------
+   Drawn in translucent white so they read as texture over any theme rather
+   than fighting the palette that's equipped. Fixed to the viewport so the
+   grain stays put while the page scrolls, like paper under the cards. */
+body[data-background]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+body[data-background="bg-legal-pad"]::before {
+  background-image: repeating-linear-gradient(transparent 0 25px, rgba(255, 255, 255, 0.055) 25px 26px);
+}
+body[data-background="bg-dot-grid"]::before {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+body[data-background="bg-graph-paper"]::before {
+  background-image:
+    repeating-linear-gradient(rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 18px);
+}
+body[data-background="bg-cork-board"]::before {
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.6px),
+    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 1.6px);
+  background-size: 13px 13px, 19px 19px;
+  background-position: 0 0, 7px 9px;
+}
+body[data-background="bg-marbled-cover"]::before {
+  background-image:
+    radial-gradient(circle at 18% 26%, rgba(255, 255, 255, 0.075) 0 12%, transparent 13%),
+    radial-gradient(circle at 74% 62%, rgba(255, 255, 255, 0.06) 0 10%, transparent 11%),
+    repeating-linear-gradient(41deg, rgba(0, 0, 0, 0.14) 0 7px, transparent 7px 14px);
+}
+/* The app's own chrome has to sit above the texture layer. */
+body[data-background] .nav,
+body[data-background] .main { position: relative; z-index: 1; }
+
+/* ---- Checkbox styles (Study Season) -------------------------------------- */
+body[data-checkbox="check-pen-tick"] .task-checkbox { border-radius: 6px; font-style: italic; }
+body[data-checkbox="check-red-pen"] .task-checkbox { border-radius: 6px; border-color: #d1544c; color: #d1544c; font-weight: 700; }
+body[data-checkbox="check-red-pen"] .task-item.completed .task-checkbox { background: transparent; color: #d1544c; }
+body[data-checkbox="check-red-pen"] .task-item.completed .task-text { text-decoration: line-through; text-decoration-color: #d1544c; }
+body[data-checkbox="check-gold-star"] .task-checkbox { border-color: var(--warning); color: var(--warning); }
+body[data-checkbox="check-gold-star"] .task-item.completed .task-checkbox { background: transparent; }
+body[data-checkbox="check-wax-seal"] .task-checkbox { border: none; background: #9c3b34; color: #fff; font-size: 11px; }
+body[data-checkbox="check-wax-seal"] .task-item.completed .task-checkbox { background: #9c3b34; }
+body[data-checkbox="check-highlighter"] .task-checkbox { border-radius: 3px; border-color: var(--warning); }
+body[data-checkbox="check-highlighter"] .task-item.completed .task-checkbox { background: var(--warning); color: #3d2f06; }
+body[data-checkbox="check-highlighter"] .task-item.completed .task-text {
+  background: linear-gradient(100deg, transparent 1%, color-mix(in srgb, var(--warning) 42%, transparent) 2% 98%, transparent 99%);
+  border-radius: 3px;
+}
+
+/* ---- Reward swatches for the new categories ------------------------------- */
+.reward-icon.font-swatch { font-size: 14px; font-weight: 600; letter-spacing: -0.5px; }
+.reward-icon.bg-swatch {
+  border-radius: 6px;
+  background-color: var(--bg-elevated);
+  background-blend-mode: normal;
+}
+.reward-icon.bg-swatch.bg-legal-pad { background-image: repeating-linear-gradient(transparent 0 5px, rgba(255, 255, 255, 0.22) 5px 6px); }
+.reward-icon.bg-swatch.bg-dot-grid { background-image: radial-gradient(rgba(255, 255, 255, 0.4) 1px, transparent 1px); background-size: 6px 6px; }
+.reward-icon.bg-swatch.bg-graph-paper {
+  background-image:
+    repeating-linear-gradient(rgba(255, 255, 255, 0.2) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0 1px, transparent 1px 6px);
+}
+.reward-icon.bg-swatch.bg-cork-board {
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.28) 1px, transparent 1.5px),
+    radial-gradient(rgba(0, 0, 0, 0.35) 1px, transparent 1.5px);
+  background-size: 7px 7px, 10px 10px;
+  background-position: 0 0, 3px 4px;
+}
+.reward-icon.bg-swatch.bg-marbled-cover {
+  background-image: repeating-linear-gradient(41deg, rgba(0, 0, 0, 0.4) 0 3px, rgba(255, 255, 255, 0.18) 3px 6px);
+}
+
+/* ---- Study Season celebration effects ------------------------------------- */
+.paper-scrap {
+  position: absolute; top: -24px; width: 11px; height: 15px;
+  animation: paper-fall linear forwards;
+}
+.paper-dot {
+  position: absolute; top: -24px; width: 7px; height: 7px; border-radius: 50%;
+  animation: paper-fall linear forwards;
+}
+@keyframes paper-fall {
+  to { transform: translateY(112vh) rotate(var(--spin, 240deg)); opacity: 0.85; }
+}
+.ink-blot {
+  position: absolute; border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 82%, #000) 0 55%, transparent 72%);
+  animation: ink-spread 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes ink-spread {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0.9; }
+  55% { opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+.page-turn {
+  position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 0 40%, rgba(255, 255, 255, 0.14) 48% 52%, transparent 60%);
+  transform: translateX(-100%);
+  animation: page-sweep 1.15s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+.page-turn-edge {
+  position: absolute; top: 0; bottom: 0; width: 3px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 26px 7px color-mix(in srgb, var(--accent) 40%, transparent);
+  transform: translateX(-10vw);
+  animation: page-edge 1.15s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+@keyframes page-sweep { to { transform: translateX(100%); } }
+@keyframes page-edge { to { transform: translateX(105vw); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-scrap, .paper-dot, .ink-blot, .page-turn, .page-turn-edge { animation-duration: 0.01ms; opacity: 0; }
+}
+
+
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -722,6 +881,36 @@ details.manage-recurring summary:hover { color: var(--text); }
 .puzzle-manage-row.dragging { opacity: 0.35; }
 .puzzle-manage-row.drag-over-top { border-top-color: var(--accent); }
 .puzzle-manage-row.drag-over-bottom { border-bottom-color: var(--accent); }
+
+/* --- Reward pool (management list, not a second trophy case) ------------- */
+.pool-list { display: flex; flex-direction: column; gap: 6px; }
+.pool-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+}
+.pool-row:not(.owned) { opacity: 0.72; }
+.pool-row .name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+.pool-status {
+  flex-shrink: 0; padding: 2px 9px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.pool-status.earned {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+.pool-status.promised {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.pool-status.unassigned {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
 
 /* --- Tier editor (Settings) --------------------------------------------- */
 .tier-editor-row {

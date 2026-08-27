@@ -6,7 +6,7 @@
 
 import { store } from "../data/store.js";
 import { el } from "./dom.js";
-import { BUILT_IN_AVATARS } from "../data/defaults.js";
+import { BUILT_IN_AVATARS, FONT_STACKS } from "../data/defaults.js";
 import { openImageLightbox } from "./lightbox.js";
 
 /** Accent-color pairs mirroring each built-in theme's CSS custom properties
@@ -91,16 +91,31 @@ export function rewardVisual(categoryId: string, itemId: string, description?: s
     // the item, so nothing leaks before the tier is actually reached.
     return el("span", { class: "reward-icon photocard-mystery" }, ["🎴"]);
   }
+  // Fonts show a letterform set in the face they'd actually apply, so the
+  // reward previews itself rather than showing a generic glyph.
+  if (categoryId === "cat-fonts") {
+    const stack = FONT_STACKS[
+      store.getState().battlepass.categories.find((c) => c.id === "cat-fonts")?.items.find((i) => i.id === itemId)?.fontFamily ?? ""
+    ];
+    return el("span", { class: "reward-icon font-swatch", style: stack ? `font-family: ${stack};` : "" }, ["Aa"]);
+  }
+  // Backgrounds render the pattern itself, at swatch size.
+  if (categoryId === "cat-backgrounds") {
+    const pattern = store.getState().battlepass.categories.find((c) => c.id === "cat-backgrounds")?.items.find((i) => i.id === itemId)?.backgroundPattern;
+    return el("span", { class: `reward-icon bg-swatch${pattern ? ` ${pattern}` : ""}` });
+  }
   const icon =
     categoryId === "cat-avatars"
       ? description || "🧑"
       : categoryId === "cat-stickers"
         ? description || "⭐"
-        : categoryId === "cat-titles"
-          ? "🎖️"
-          : categoryId === "cat-effects"
-            ? "✨"
-            : "🎁";
+        : categoryId === "cat-checkboxes"
+          ? description || "✓"
+          : categoryId === "cat-titles"
+            ? "🎖️"
+            : categoryId === "cat-effects"
+              ? "✨"
+              : "🎁";
   return el("span", { class: "reward-icon" }, [icon]);
 }
 

@@ -75,6 +75,61 @@ function equipButtonFor(categoryId: string, item: RewardItem): HTMLElement | nul
       [active ? "Equipped ✓" : "Equip"]
     );
   }
+  // Fonts, Backgrounds and Checkbox Styles equip exactly like a theme, and
+  // each is un-equippable back to Metro's built-in look — unlike a theme,
+  // where "no theme" isn't a state (theme-default is itself a theme).
+  const slotEquip = (
+    active: boolean,
+    equip: () => void,
+    unequip: () => void,
+    label: string,
+    equippedMessage: string
+  ) =>
+    el("div", { style: "display:flex; gap:6px; flex-wrap:wrap;" }, [
+      el(
+        "button",
+        {
+          class: `small${active ? "" : " primary"}`,
+          disabled: active,
+          onclick: () => {
+            equip();
+            showToast(`${label} equipped`, equippedMessage);
+          },
+        },
+        [active ? "Equipped ✓" : "Equip"]
+      ),
+      active
+        ? el("button", { class: "small ghost", onclick: () => { unequip(); showToast(`${label} removed`, "Back to Metro's built-in look."); } }, ["Unequip"])
+        : null,
+    ]);
+
+  if (categoryId === "cat-fonts") {
+    return slotEquip(
+      s.activeFontId === item.id,
+      () => store.setActiveFont(item.id),
+      () => store.setActiveFont(null),
+      "Font",
+      `${item.name} is now the typeface across every page.`
+    );
+  }
+  if (categoryId === "cat-backgrounds") {
+    return slotEquip(
+      s.activeBackgroundId === item.id,
+      () => store.setActiveBackground(item.id),
+      () => store.setActiveBackground(null),
+      "Background",
+      `${item.name} now sits behind your cards.`
+    );
+  }
+  if (categoryId === "cat-checkboxes") {
+    return slotEquip(
+      s.activeCheckboxId === item.id,
+      () => store.setActiveCheckbox(item.id),
+      () => store.setActiveCheckbox(null),
+      "Checkbox style",
+      `Completed tasks now show ${item.description || "✓"}.`
+    );
+  }
   if (categoryId === "cat-effects") {
     const active = s.activeEffectId === item.id;
     return el(

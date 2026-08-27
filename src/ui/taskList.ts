@@ -63,6 +63,19 @@ export function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLEl
   };
 }
 
+/** The glyph a completed task shows, from the equipped Checkbox Style. The
+ * mark lives in the reward's `description` (the same field avatars and
+ * stickers use for their emoji), so a user-created style needs nothing beyond
+ * picking a character. Falls back to Metro's original checkmark whenever
+ * nothing is equipped or the equipped item has since been deleted. */
+function completedMark(): string {
+  const s = store.getState();
+  const id = s.settings.activeCheckboxId;
+  if (!id) return "✓";
+  const item = s.battlepass.categories.find((c) => c.id === "cat-checkboxes")?.items.find((i) => i.id === id);
+  return item?.description || "✓";
+}
+
 export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions = {}): HTMLElement {
   const container = el("div", { class: "card" });
   /** Set by paint() on every repaint — see enableDragReorder in ui/dragList.ts,
@@ -189,7 +202,7 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
             paint();
           },
         },
-        [task.completed ? "✓" : ""]
+        [task.completed ? completedMark() : ""]
       );
       row.appendChild(checkbox);
     }

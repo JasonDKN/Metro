@@ -79,6 +79,9 @@ export function defaultSettings(): Settings {
     activeAvatarId: DEFAULT_AVATAR_ID,
     activeTitleId: null,
     activeEffectId: null,
+    activeFontId: null,
+    activeBackgroundId: null,
+    activeCheckboxId: null,
     pointsConfig: { ...DEFAULT_POINTS_CONFIG },
   };
 }
@@ -312,14 +315,6 @@ export const AUGUST_BTS_TIERS: Tier[] = [
   { tier: 28, pointsRequired: 4900 }, { tier: 29, pointsRequired: 5220 }, { tier: 30, pointsRequired: 5550 },
 ];
 
-/** Monthly-keyed tier-ladder overrides, mirroring SEASONAL_REWARD_ROADMAPS
- * below. Store.processDueRollovers looks up the new season's monthKey here;
- * a match swaps bp.tiers to it (snapshotting the outgoing ladder to
- * bp.baselineTiers first), no match restores bp.baselineTiers if one was
- * saved, or otherwise leaves bp.tiers untouched entirely. */
-export const SEASONAL_TIERS: Record<string, Tier[]> = {
-  [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_TIERS,
-};
 
 /** August 2026's full 30-tier curated roadmap — ascending rarity top to
  * bottom, same as the evergreen table, just BTS/Arirang-themed and with
@@ -369,14 +364,186 @@ export const AUGUST_BTS_REWARD_ROADMAP: RewardRoadmapEntry[] = [
   { tier: 30, categoryId: "cat-effects", itemId: "effect-bangtan-flash" },
 ];
 
+
+export function defaultPhotocardAlbum(): PhotocardAlbum {
+  return { coverStickers: [] };
+}
+
+// ============================================================================
+// Study Season — September 2026.
+//
+// A stationery season, and deliberately not a fan season: every tier hands
+// back a piece of the interface rather than a souvenir from outside it. That
+// premise is why it introduces three new reward categories — a Font, a
+// Background texture and a Checkbox Style — alongside the existing themes,
+// titles, avatars and effects.
+//
+// No Photocards this month. Nothing here is BTS-themed.
+// ============================================================================
+
+export const STUDY_SEASON_MONTH_KEY = "2026-09";
+
+/** Font stacks a Font reward can apply, keyed by id. Only these ids are ever
+ * written into a style declaration (see applyTheme in ui/nav.ts), so a reward
+ * naming something not in this table simply does nothing rather than
+ * injecting arbitrary CSS. All system faces — no webfont, no network. */
+export const FONT_STACKS: Record<string, string> = {
+  "font-ledger": '"Trebuchet MS", Verdana, Geneva, sans-serif',
+  "font-manuscript": 'Georgia, "Times New Roman", Times, serif',
+  "font-marginalia": '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
+  "font-typewriter": '"Courier New", Courier, monospace',
+  "font-copperplate": 'Baskerville, "Hoefler Text", Garamond, "Times New Roman", serif',
+};
+
+/** Background patterns, as ids matched by a body[data-background="..."] rule
+ * in styles.css. Every pattern is drawn in translucent black/white rather
+ * than fixed colours, so it reads as texture over any theme instead of
+ * fighting the one you have equipped. */
+export const BACKGROUND_PATTERNS: string[] = [
+  "bg-legal-pad",
+  "bg-dot-grid",
+  "bg-graph-paper",
+  "bg-cork-board",
+  "bg-marbled-cover",
+];
+
+interface SeedReward {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  flavorText: string;
+  /** Emoji, for avatars and checkbox marks — both render from `description`. */
+  description?: string;
+  colors?: [string, string];
+  effectAnimation?: string;
+  fontFamily?: string;
+  backgroundPattern?: string;
+}
+
+export const STUDY_FONTS: SeedReward[] = [
+  { id: "font-ledger", name: "Ledger", rarity: "common", fontFamily: "font-ledger", flavorText: "A clean everyday sans — the hand you'd use for a list you actually intend to finish." },
+  { id: "font-manuscript", name: "Manuscript", rarity: "uncommon", fontFamily: "font-manuscript", flavorText: "A bookish serif. Makes a grocery list feel like it has footnotes." },
+  { id: "font-marginalia", name: "Marginalia", rarity: "rare", fontFamily: "font-marginalia", flavorText: "Humanist and slightly hand-set, like something written in the margin and never tidied up." },
+  { id: "font-typewriter", name: "Typewriter", rarity: "epic", fontFamily: "font-typewriter", flavorText: "Monospace, with the clack implied. Every task the same width, whether it deserves it or not." },
+  { id: "font-copperplate", name: "Copperplate", rarity: "legendary", fontFamily: "font-copperplate", flavorText: "The good stationery, kept in the drawer for things that matter." },
+];
+
+export const STUDY_BACKGROUNDS: SeedReward[] = [
+  { id: "bg-legal-pad", name: "Legal Pad", rarity: "common", backgroundPattern: "bg-legal-pad", flavorText: "Faint horizontal rules. Somewhere to put the thought before it escapes." },
+  { id: "bg-dot-grid", name: "Dot Grid", rarity: "common", backgroundPattern: "bg-dot-grid", flavorText: "The bullet-journal standard — structure if you want it, blank if you don't." },
+  { id: "bg-graph-paper", name: "Graph Paper", rarity: "uncommon", backgroundPattern: "bg-graph-paper", flavorText: "A fine grid, for the days that need to be squared off." },
+  { id: "bg-cork-board", name: "Cork Board", rarity: "rare", backgroundPattern: "bg-cork-board", flavorText: "Fine speckled texture, like something you'd pin a note to and then never look at again." },
+  { id: "bg-marbled-cover", name: "Marbled Cover", rarity: "epic", backgroundPattern: "bg-marbled-cover", flavorText: "The mottled composition notebook. Indestructible, and slightly menacing." },
+];
+
+export const STUDY_CHECKBOXES: SeedReward[] = [
+  { id: "check-pen-tick", name: "Pen Tick", rarity: "common", description: "✓", flavorText: "A hand-drawn check. The oldest reward in productivity." },
+  { id: "check-red-pen", name: "Red Pen", rarity: "uncommon", description: "✗", flavorText: "Struck through in red, teacher-style. Done is done." },
+  { id: "check-gold-star", name: "Gold Star", rarity: "rare", description: "★", flavorText: "The one you actually wanted, all along." },
+  { id: "check-wax-seal", name: "Wax Seal", rarity: "epic", description: "✦", flavorText: "Pressed, and therefore final. No take-backs." },
+  { id: "check-highlighter", name: "Highlighter", rarity: "legendary", description: "✓", flavorText: "Sweeps a band of colour clean across the finished task." },
+];
+
+export const STUDY_THEMES: SeedReward[] = [
+  { id: "theme-foolscap", name: "Foolscap", rarity: "common", colors: ["#8a6a3b", "#b08d55"], flavorText: "Warm paper and graphite. Named for the sheet size, and for the watermark of a jester's cap that used to be on it." },
+  { id: "theme-blueprint", name: "Blueprint", rarity: "uncommon", colors: ["#4aa3d8", "#7ec8e8"], flavorText: "Deep blue and cyan rules — for a day you'd rather draft than write." },
+  { id: "theme-fountain-pen", name: "Fountain Pen", rarity: "rare", colors: ["#6b8cd6", "#c9a227"], flavorText: "Ink navy and brass nib. Heavier in the hand than it needs to be, on purpose." },
+  { id: "theme-midnight-oil", name: "Midnight Oil", rarity: "legendary", colors: ["#f0a850", "#c9772f"], flavorText: "Near-black, with one warm lamp. The finale, for whatever you're still up finishing." },
+];
+
+export const STUDY_AVATARS: SeedReward[] = [
+  { id: "avatar-pencil", name: "Pencil", rarity: "common", description: "✏️", flavorText: "Erasable, which is the whole point." },
+  { id: "avatar-paperclip", name: "Paperclip", rarity: "uncommon", description: "\u{1F4CE}", flavorText: "Holds unrelated things together through sheer tension." },
+  { id: "avatar-fountain-pen", name: "Fountain Pen", rarity: "rare", description: "✒️", flavorText: "Commits. No pencil about it." },
+];
+
+export const STUDY_TITLES: SeedReward[] = [
+  { id: "title-note-taker", name: "Note Taker", rarity: "common", flavorText: "You've started a list, which is most of it." },
+  { id: "title-margin-scribbler", name: "Margin Scribbler", rarity: "uncommon", flavorText: "The good ideas were never in the middle of the page anyway." },
+  { id: "title-desk-marshal", name: "Desk Marshal", rarity: "rare", flavorText: "Order imposed, daily, by force of will." },
+  { id: "title-keeper-of-lists", name: "Keeper of Lists", rarity: "epic", flavorText: "Custodian of every loose intention you've ever had." },
+  { id: "title-curator-loose-ends", name: "Curator of Loose Ends", rarity: "legendary", flavorText: "Not finished. Catalogued, which is close enough." },
+];
+
+export const STUDY_EFFECTS: SeedReward[] = [
+  { id: "effect-paper-confetti", name: "Paper Confetti", rarity: "uncommon", effectAnimation: "effect-paper-confetti", flavorText: "Torn scraps and hole-punch dots, drifting down over a cleared list." },
+  { id: "effect-ink-bloom", name: "Ink Bloom", rarity: "rare", effectAnimation: "effect-ink-bloom", flavorText: "A drop of ink spreading out through the page." },
+  { id: "effect-page-turn", name: "Page Turn", rarity: "epic", effectAnimation: "effect-page-turn", flavorText: "The whole screen turns over like a sheet of paper. Next." },
+];
+
+/** September's tier ladder — 30 tiers topping out at 6,600.
+ *
+ * Between August's 5,550 and the 8,220 an every-single-day month would
+ * justify. August's number was set when a perfect puzzle day was worth 50
+ * points; it's worth 100 now, so that ladder runs at roughly half its
+ * intended difficulty. 6,600 is about twenty active days at ~330 points —
+ * comfortably inside a good month without requiring every day of it, which
+ * is the point: the season should survive a few days off. */
+export const SEPTEMBER_STUDY_TIERS: Tier[] = [
+  { tier: 1, pointsRequired: 100 }, { tier: 2, pointsRequired: 160 }, { tier: 3, pointsRequired: 240 },
+  { tier: 4, pointsRequired: 330 }, { tier: 5, pointsRequired: 440 }, { tier: 6, pointsRequired: 550 },
+  { tier: 7, pointsRequired: 670 }, { tier: 8, pointsRequired: 810 }, { tier: 9, pointsRequired: 950 },
+  { tier: 10, pointsRequired: 1110 }, { tier: 11, pointsRequired: 1280 }, { tier: 12, pointsRequired: 1460 },
+  { tier: 13, pointsRequired: 1650 }, { tier: 14, pointsRequired: 1850 }, { tier: 15, pointsRequired: 2060 },
+  { tier: 16, pointsRequired: 2290 }, { tier: 17, pointsRequired: 2530 }, { tier: 18, pointsRequired: 2770 },
+  { tier: 19, pointsRequired: 3030 }, { tier: 20, pointsRequired: 3300 }, { tier: 21, pointsRequired: 3580 },
+  { tier: 22, pointsRequired: 3870 }, { tier: 23, pointsRequired: 4180 }, { tier: 24, pointsRequired: 4490 },
+  { tier: 25, pointsRequired: 4820 }, { tier: 26, pointsRequired: 5150 }, { tier: 27, pointsRequired: 5500 },
+  { tier: 28, pointsRequired: 5860 }, { tier: 29, pointsRequired: 6230 }, { tier: 30, pointsRequired: 6600 },
+];
+
+/** September's curated roadmap — ascending rarity, with each of the three new
+ * categories spread across five tiers so no stretch of the climb is all one
+ * kind of thing. Bands: common 1-7, uncommon 8-14, rare 15-21, epic 22-26,
+ * legendary 27-30. */
+export const SEPTEMBER_STUDY_ROADMAP: RewardRoadmapEntry[] = [
+  { tier: 1, categoryId: "cat-titles", itemId: "title-note-taker" },
+  { tier: 2, categoryId: "cat-avatars", itemId: "avatar-pencil" },
+  { tier: 3, categoryId: "cat-checkboxes", itemId: "check-pen-tick" },
+  { tier: 4, categoryId: "cat-backgrounds", itemId: "bg-legal-pad" },
+  { tier: 5, categoryId: "cat-fonts", itemId: "font-ledger" },
+  { tier: 6, categoryId: "cat-themes", itemId: "theme-foolscap" },
+  { tier: 7, categoryId: "cat-backgrounds", itemId: "bg-dot-grid" },
+  { tier: 8, categoryId: "cat-titles", itemId: "title-margin-scribbler" },
+  { tier: 9, categoryId: "cat-checkboxes", itemId: "check-red-pen" },
+  { tier: 10, categoryId: "cat-fonts", itemId: "font-manuscript" },
+  { tier: 11, categoryId: "cat-backgrounds", itemId: "bg-graph-paper" },
+  { tier: 12, categoryId: "cat-avatars", itemId: "avatar-paperclip" },
+  { tier: 13, categoryId: "cat-effects", itemId: "effect-paper-confetti" },
+  { tier: 14, categoryId: "cat-themes", itemId: "theme-blueprint" },
+  { tier: 15, categoryId: "cat-titles", itemId: "title-desk-marshal" },
+  { tier: 16, categoryId: "cat-checkboxes", itemId: "check-gold-star" },
+  { tier: 17, categoryId: "cat-fonts", itemId: "font-marginalia" },
+  { tier: 18, categoryId: "cat-backgrounds", itemId: "bg-cork-board" },
+  { tier: 19, categoryId: "cat-avatars", itemId: "avatar-fountain-pen" },
+  { tier: 20, categoryId: "cat-effects", itemId: "effect-ink-bloom" },
+  { tier: 21, categoryId: "cat-themes", itemId: "theme-fountain-pen" },
+  { tier: 22, categoryId: "cat-titles", itemId: "title-keeper-of-lists" },
+  { tier: 23, categoryId: "cat-checkboxes", itemId: "check-wax-seal" },
+  { tier: 24, categoryId: "cat-fonts", itemId: "font-typewriter" },
+  { tier: 25, categoryId: "cat-backgrounds", itemId: "bg-marbled-cover" },
+  { tier: 26, categoryId: "cat-effects", itemId: "effect-page-turn" },
+  { tier: 27, categoryId: "cat-titles", itemId: "title-curator-loose-ends" },
+  { tier: 28, categoryId: "cat-checkboxes", itemId: "check-highlighter" },
+  { tier: 29, categoryId: "cat-fonts", itemId: "font-copperplate" },
+  { tier: 30, categoryId: "cat-themes", itemId: "theme-midnight-oil" },
+];
+
+/** Monthly-keyed tier-ladder overrides, mirroring SEASONAL_REWARD_ROADMAPS
+ * below. Store.processDueRollovers looks up the new season's monthKey here;
+ * a match swaps bp.tiers to it (snapshotting the outgoing ladder to
+ * bp.baselineTiers first), no match restores bp.baselineTiers if one was
+ * saved, or otherwise leaves bp.tiers untouched entirely. */
+export const SEASONAL_TIERS: Record<string, Tier[]> = {
+  [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_TIERS,
+  "2026-09": SEPTEMBER_STUDY_TIERS,
+};
+
 /** Monthly-keyed curated roadmap overrides. Store.activeCuratedRoadmap looks
  * up the current season's monthKey here first, falling back to the
  * evergreen DEFAULT_REWARD_ROADMAP for every month that isn't specifically
  * scheduled — so adding a season here never touches any other month. */
 export const SEASONAL_REWARD_ROADMAPS: Record<string, RewardRoadmapEntry[]> = {
   [BTS_SEASON_MONTH_KEY]: AUGUST_BTS_REWARD_ROADMAP,
+  "2026-09": SEPTEMBER_STUDY_ROADMAP,
 };
-
-export function defaultPhotocardAlbum(): PhotocardAlbum {
-  return { coverStickers: [] };
-}

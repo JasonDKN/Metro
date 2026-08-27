@@ -160,6 +160,14 @@ export interface RewardItem {
    * it plays. An animation is code, not data, so a user can't author a new
    * one — they pick which existing one fires. See celebrate() in ui/toast.ts. */
   effectAnimation?: string;
+  /** For a Font reward: which stack in FONT_STACKS it applies. Named rather
+   * than storing raw CSS, because this value ends up in a style declaration
+   * and an arbitrary string there is an injection surface. */
+  fontFamily?: string;
+  /** For a Background reward: which pattern in BACKGROUND_PATTERNS it shows.
+   * Named for the same reason as fontFamily — the pattern itself is a CSS
+   * rule keyed by id, not user-supplied CSS. */
+  backgroundPattern?: string;
   rarity: Rarity;
   kind: RewardKind;
 }
@@ -265,6 +273,13 @@ export interface Settings {
   activeThemeId: string;
   activeAvatarId: string;
   activeTitleId: string | null;
+  /** The equipped Font, Background and Checkbox Style. All three are null on
+   * a fresh install, meaning "Metro's built-in look" — the app has always had
+   * a typeface, a plain ground and a checkmark, so null keeps exactly the
+   * appearance that existed before these became earnable. */
+  activeFontId: string | null;
+  activeBackgroundId: string | null;
+  activeCheckboxId: string | null;
   /** Which Celebration Effect plays when you clear your daily checklist.
    * null means the built-in default confetti burst — the same animation
    * that always played before Celebration Effects existed as an earnable

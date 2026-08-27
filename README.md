@@ -63,6 +63,22 @@ Recording a score again for the same day replaces the previous entry and correct
 - Season points reset to 0 on the 1st of each month; lifetime points never reset.
 - Reaching a new tier grants one **specific** reward — no randomization. Rewards are assigned to tiers in advance, in strictly increasing rarity as you climb (common early tiers, legendary at the top), so the Tier Track on the Battlepass page always shows exactly what every tier gives, including ones you haven't reached yet. Reward categories: themes, avatars, titles, and celebration effects — every category, including Celebration Effects, is guaranteed at least one tier in the roadmap. (Streak Freeze and Wildcard tokens were retired; an in-progress season is re-dealt against the shortened roadmap so nobody ends up short a reward — see Store.removeConsumableRewards.) A tier not yet reached picks up curated design changes like this automatically; a tier you've already earned a reward from keeps exactly what it granted.
 
+### Customization
+
+Beyond themes, avatars, titles and celebration effects, three more parts of the interface are earnable:
+
+- **Fonts** set the typeface across every page. All system faces — nothing is downloaded.
+- **Backgrounds** put a texture behind the cards (ruled paper, dot grid, graph paper, speckle, marbled). Drawn in translucent white so they layer under whichever theme you have on rather than fighting it.
+- **Checkbox Styles** change the mark a completed task shows — a pen tick, a struck-through red pen, a gold star, a wax seal, a highlighter sweep.
+
+Each equips from the Inventory page and can be un-equipped back to Metro's built-in look. You can invent your own in any of them from Settings: a font picks from the same stack list, a background from the same patterns, and a checkbox style takes any character you like.
+
+### September 2026 — Study Season
+
+A stationery season, and deliberately not a fan season: every tier hands back a piece of the interface rather than a souvenir from outside it. Thirty tiers topping out at 6,600 points, with the three new categories getting five tiers each, four new themes (Foolscap, Blueprint, Fountain Pen, Midnight Oil), five titles, three avatars and three effects (Paper Confetti, Ink Bloom, Page Turn). No Photocards.
+
+The 6,600 finale sits between August's 5,550 and the ~8,200 an every-single-day month would justify — August's number was set when a perfect puzzle day was worth 50 points rather than 100, so it runs at about half its intended difficulty. 6,600 is roughly twenty active days, which leaves room for days off.
+
 ### Building your own tiers
 
 The **Battlepass Tiers & Rewards** section in Settings lists every tier with its points cost and exactly what it grants. Tiers you've already reached are read-only — those rewards were really earned, so they can't be swapped out after the fact. For any tier still ahead of you, a dropdown reassigns its reward from anywhere in the pool, or hands it back to automatic assignment.
@@ -76,6 +92,10 @@ The **Battlepass Tiers & Rewards** section in Settings lists every tier with its
 - **Titles** and your own categories — just a name and a rarity.
 
 A reward you pick by hand is pinned: seasonal roadmaps are re-applied to upcoming tiers on every load, and a pinned reward is skipped so it can't be quietly overwritten. Editing the ladder also marks it as yours, which stops a scheduled season from re-syncing it and deleting tiers you added.
+
+Removing a tier renumbers everything above it and carries each tier's reward along with it, and frees the removed tier's reward for use elsewhere. (An earlier version left the entry behind, which made that reward permanently unassignable — see Store.pruneOrphanedRoadmapEntries, which repairs saves affected by it on load.) Only tiers you haven't reached can be removed or reassigned.
+
+The **Reward Pool** on the Battlepass page is the workbench for all of this: every reward shows whether it's already **Earned**, waiting at a particular **Tier**, or **Unassigned** and attached to nothing. Things you've earned appear both here and in Unlocked Rewards above — the latter is the trophy case, this is where you edit.
 - You can add brand-new reward categories and items from the Battlepass page at any time — this never resets or removes anything you've already unlocked, and new items become available to fill any tier that was still waiting on one (e.g. if you extend the tier track further than the pool currently covers).
 - The Battlepass and Inventory pages both show a profile banner (your equipped avatar, name, title, and progress to the next tier) and icons throughout — a color swatch for each theme, an emoji for avatars/titles/effects/consumables — so it's not just plain text and numbers.
 - What's equippable is always computed live from your actual grant history (`battlepass.unlocked`) — there's no separate "unlocked items" cache anywhere to fall out of sync, so what the Inventory page shows as earned is exactly what the Battlepass page says you've earned, by construction. If something you had equipped stops being valid (e.g. its item was deleted from the pool while equipped), it falls back to the default rather than leaving a broken selection.

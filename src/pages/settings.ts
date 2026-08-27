@@ -5,12 +5,14 @@
 // ============================================================================
 
 import { store } from "../data/store.js";
+import type { RewardExtras } from "../data/store.js";
 import { mountNav } from "../ui/nav.js";
 import { el, clear, qs } from "../ui/dom.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import { rarityLabel } from "../data/rewards.js";
 import { fileToResizedDataUrl } from "../ui/image.js";
 import { emojiPicker } from "../ui/emojiPicker.js";
+import { BACKGROUND_PATTERNS, FONT_STACKS } from "../data/defaults.js";
 import type { Difficulty, Rarity, RewardItem, Tier } from "../types.js";
 import { showToast } from "../ui/toast.js";
 import { renderManagePuzzlesCard } from "../ui/dailyGames.js";
@@ -101,6 +103,25 @@ function rewardItemSelect(selectedItemId?: string): HTMLSelectElement {
  * appear depends entirely on the category: a Photocard needs a picture, a
  * Sticker or Avatar needs an emoji, a Theme needs colours, an Effect needs to
  * know which animation to play, and a Title needs nothing but its name. */
+/** Human names for the font stacks and background patterns, so the builder
+ * offers "Typewriter" rather than a raw id. Anything not listed falls back to
+ * its id, which keeps this from becoming a second place to forget to update. */
+const FONT_LABELS: Record<string, string> = {
+  "font-ledger": "Ledger — clean sans",
+  "font-manuscript": "Manuscript — bookish serif",
+  "font-marginalia": "Marginalia — humanist serif",
+  "font-typewriter": "Typewriter — monospace",
+  "font-copperplate": "Copperplate — display serif",
+};
+
+const PATTERN_LABELS: Record<string, string> = {
+  "bg-legal-pad": "Legal Pad — horizontal rules",
+  "bg-dot-grid": "Dot Grid",
+  "bg-graph-paper": "Graph Paper",
+  "bg-cork-board": "Cork Board — fine speckle",
+  "bg-marbled-cover": "Marbled Cover — diagonal streaks",
+};
+
 function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: RewardItem; categoryId: string } | { error: string } } {
   const bp = store.getState().battlepass;
 
@@ -159,6 +180,24 @@ function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: Rewar
     ]),
   ]);
 
+  // --- Fonts: which stack it applies ----------------------------------------
+  const fontSelect = el(
+    "select",
+    { class: "reward-font-select" },
+    Object.keys(FONT_STACKS).map((id, i) =>
+      el("option", { value: id, selected: i === 0, style: `font-family: ${FONT_STACKS[id]};` }, [FONT_LABELS[id] ?? id])
+    )
+  ) as HTMLSelectElement;
+  const fontField = el("div", { class: "field" }, [el("label", {}, ["Typeface"]), fontSelect]);
+
+  // --- Backgrounds: which pattern it shows ----------------------------------
+  const patternSelect = el(
+    "select",
+    { class: "reward-pattern-select" },
+    BACKGROUND_PATTERNS.map((id, i) => el("option", { value: id, selected: i === 0 }, [PATTERN_LABELS[id] ?? id]))
+  ) as HTMLSelectElement;
+  const patternField = el("div", { class: "field" }, [el("label", {}, ["Pattern"]), patternSelect]);
+
   // --- Celebration Effects: which animation plays ---------------------------
   const animationSelect = el(
     "select",
@@ -173,6 +212,8 @@ function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: Rewar
     el("div", { class: "field", style: "flex: 0 0 150px;" }, [el("label", {}, ["Rarity"]), raritySelect]),
     imageField,
     effectField,
+    fontField,
+    patternField,
     emojiField,
     themeField,
   ]);
@@ -180,9 +221,12 @@ function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: Rewar
   const syncFields = () => {
     const id = categorySelect.value;
     imageField.style.display = id === "cat-photocards" ? "" : "none";
-    emojiField.style.display = id === "cat-stickers" || id === "cat-avatars" ? "" : "none";
+    // Checkbox styles render from a glyph, exactly like stickers and avatars.
+    emojiField.style.display = id === "cat-stickers" || id === "cat-avatars" || id === "cat-checkboxes" ? "" : "none";
     themeField.style.display = id === "cat-themes" ? "" : "none";
     effectField.style.display = id === "cat-effects" ? "" : "none";
+    fontField.style.display = id === "cat-fonts" ? "" : "none";
+    patternField.style.display = id === "cat-backgrounds" ? "" : "none";
   };
   categorySelect.addEventListener("change", syncFields);
   syncFields();
@@ -198,11 +242,17 @@ function renderRewardBuilder(): { wrap: HTMLElement; create: () => { item: Rewar
       // Stickers and Avatars render as their emoji, so one is required —
       // without it they'd fall back to a generic placeholder icon.
       let description = "";
-      const extras: { imageDataUrl?: string; colors?: [string, string]; effectAnimation?: string } = {};
-      if (categoryId === "cat-stickers" || categoryId === "cat-avatars") {
+      const extras: RewardExtras = {};
+      if (categoryId === "cat-stickers" || categoryId === "cat-avatars" || categoryId === "cat-checkboxes") {
         const emoji = picker.value();
-        if (!emoji) return { error: "Pick an emoji for this reward." };
+        if (!emoji) {
+          return { error: categoryId === "cat-checkboxes" ? "Pick the mark this checkbox shows." : "Pick an emoji for this reward." };
+        }
         description = emoji;
+      } else if (categoryId === "cat-fonts") {
+        extras.fontFamily = fontSelect.value;
+      } else if (categoryId === "cat-backgrounds") {
+        extras.backgroundPattern = patternSelect.value;
       } else if (categoryId === "cat-photocards") {
         extras.imageDataUrl = pendingImage;
       } else if (categoryId === "cat-themes") {
@@ -296,13 +346,13 @@ function renderTierEditor(): HTMLElement {
           {
             class: "small danger ghost",
             onclick: () => {
-              store.updateTiers(
-                store
-                  .getState()
-                  .battlepass.tiers.filter((t) => t.tier !== tier.tier)
-                  .map((t, i) => ({ tier: i + 1, pointsRequired: t.pointsRequired }))
-              );
-              showToast("Tier removed");
+              // store.removeTier, not a filter + updateTiers: removing a tier
+              // renumbers everything above it, and the roadmap is keyed by
+              // that number, so the rewards have to be remapped in step or
+              // they slide onto the wrong tiers.
+              if (store.removeTier(tier.tier)) {
+                showToast("Tier removed", "Its reward is free to use on another tier.");
+              }
             },
           },
           ["Remove"]
@@ -360,12 +410,14 @@ function renderTierEditor(): HTMLElement {
       // Resolve the reward BEFORE adding the tier, so a validation failure
       // doesn't leave a stray empty tier behind.
       let assignment: { categoryId: string; itemId: string } | null = null;
+      let createdItemId: string | null = null;
       if (modeSelect.value === "new") {
         const created = builder.create();
         if ("error" in created) {
           showToast("Couldn't add that tier", created.error);
           return;
         }
+        createdItemId = created.item.id;
         assignment = { categoryId: created.categoryId, itemId: created.item.id };
       } else if (modeSelect.value === "existing") {
         if (!existingSelect.value) {
@@ -384,7 +436,13 @@ function renderTierEditor(): HTMLElement {
       if (assignment) {
         const result = store.setTierReward(tierNumber, assignment.categoryId, assignment.itemId);
         if (!result.ok) {
-          showToast("Tier added, but not its reward", result.error);
+          // A reward invented for this tier and then rejected would otherwise
+          // sit in the pool forever, unassigned and indistinguishable from the
+          // real ones — which is how a Photocards list fills up with cards
+          // nobody remembers creating. Undo it along with the tier.
+          if (createdItemId) store.deleteRewardItem(assignment.categoryId, createdItemId);
+          store.removeTier(tierNumber);
+          showToast("Couldn't add that tier", result.error);
           return;
         }
       }
