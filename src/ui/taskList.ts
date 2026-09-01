@@ -202,7 +202,7 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
             paint();
           },
         },
-        [task.completed ? completedMark() : ""]
+        [task.completed ? el("span", { class: "mark-glyph" }, [completedMark()]) : null]
       );
       row.appendChild(checkbox);
     }

@@ -142,53 +142,54 @@ body[data-theme="theme-midnight-oil"] {
 }
 
 /* ---- Background patterns (Study Season) -----------------------------------
-   Drawn in translucent white so they read as texture over any theme rather
-   than fighting the palette that's equipped. Fixed to the viewport so the
-   grain stays put while the page scrolls, like paper under the cards. */
-body[data-background]::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
+   Painted as body's own background-image rather than an overlay element.
+   An earlier version used a fixed ::before and then had to lift .nav and
+   .main above it with position/z-index — which overrode .nav's
+   `position: sticky` and made the sidebar scroll away with the page. Nothing
+   here touches another element's layout at all now.
+
+   Drawn in translucent white/black so they read as texture over any theme
+   rather than fighting the palette that's equipped, and attached to the
+   viewport so the grain stays put while the page scrolls, like paper under
+   the cards. */
+body[data-background] { background-attachment: fixed; }
+body[data-background="bg-legal-pad"] {
+  background-image: repeating-linear-gradient(transparent 0 25px, rgba(255, 255, 255, 0.055) 25px 26px), var(--bg-glow);
 }
-body[data-background="bg-legal-pad"]::before {
-  background-image: repeating-linear-gradient(transparent 0 25px, rgba(255, 255, 255, 0.055) 25px 26px);
+body[data-background="bg-dot-grid"] {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px), var(--bg-glow);
+  background-size: 22px 22px, auto;
 }
-body[data-background="bg-dot-grid"]::before {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-body[data-background="bg-graph-paper"]::before {
+body[data-background="bg-graph-paper"] {
   background-image:
     repeating-linear-gradient(rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 18px),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 18px);
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 18px),
+    var(--bg-glow);
 }
-body[data-background="bg-cork-board"]::before {
+body[data-background="bg-cork-board"] {
   background-image:
     radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.6px),
-    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 1.6px);
-  background-size: 13px 13px, 19px 19px;
-  background-position: 0 0, 7px 9px;
+    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 1.6px),
+    var(--bg-glow);
+  background-size: 13px 13px, 19px 19px, auto;
+  background-position: 0 0, 7px 9px, 0 0;
 }
-body[data-background="bg-marbled-cover"]::before {
+body[data-background="bg-marbled-cover"] {
   background-image:
     radial-gradient(circle at 18% 26%, rgba(255, 255, 255, 0.075) 0 12%, transparent 13%),
     radial-gradient(circle at 74% 62%, rgba(255, 255, 255, 0.06) 0 10%, transparent 11%),
-    repeating-linear-gradient(41deg, rgba(0, 0, 0, 0.14) 0 7px, transparent 7px 14px);
+    repeating-linear-gradient(41deg, rgba(0, 0, 0, 0.14) 0 7px, transparent 7px 14px),
+    var(--bg-glow);
 }
-/* The app's own chrome has to sit above the texture layer. */
-body[data-background] .nav,
-body[data-background] .main { position: relative; z-index: 1; }
 
 /* ---- Checkbox styles (Study Season) -------------------------------------- */
-body[data-checkbox="check-pen-tick"] .task-checkbox { border-radius: 6px; font-style: italic; }
+body[data-checkbox="check-pen-tick"] .task-checkbox { border-radius: 6px; font-style: italic; font-size: 11px; }
 body[data-checkbox="check-red-pen"] .task-checkbox { border-radius: 6px; border-color: #d1544c; color: #d1544c; font-weight: 700; }
 body[data-checkbox="check-red-pen"] .task-item.completed .task-checkbox { background: transparent; color: #d1544c; }
 body[data-checkbox="check-red-pen"] .task-item.completed .task-text { text-decoration: line-through; text-decoration-color: #d1544c; }
-body[data-checkbox="check-gold-star"] .task-checkbox { border-color: var(--warning); color: var(--warning); }
+body[data-checkbox="check-gold-star"] .task-checkbox { border-color: var(--warning); color: var(--warning); font-size: 11px; }
 body[data-checkbox="check-gold-star"] .task-item.completed .task-checkbox { background: transparent; }
-body[data-checkbox="check-wax-seal"] .task-checkbox { border: none; background: #9c3b34; color: #fff; font-size: 11px; }
+body[data-checkbox="check-wax-seal"] .task-checkbox { border: none; background: #9c3b34; color: #fff; font-size: 10px; }
 body[data-checkbox="check-wax-seal"] .task-item.completed .task-checkbox { background: #9c3b34; }
 body[data-checkbox="check-highlighter"] .task-checkbox { border-radius: 3px; border-color: var(--warning); }
 body[data-checkbox="check-highlighter"] .task-item.completed .task-checkbox { background: var(--warning); color: #3d2f06; }
@@ -270,8 +271,11 @@ body[data-checkbox="check-highlighter"] .task-item.completed .task-text {
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: radial-gradient(1200px 600px at 20% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent),
-              var(--bg);
+  /* Named so an equipped Background pattern can layer over this glow rather
+     than replace it — background-image is a single property, so a pattern
+     rule that only listed its own texture silently dropped the glow. */
+  --bg-glow: radial-gradient(1200px 600px at 20% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent);
+  background: var(--bg-glow), var(--bg);
   color: var(--text);
   font-family: var(--font);
   line-height: 1.5;
@@ -429,6 +433,24 @@ label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom
   background: transparent;
   display: flex; align-items: center; justify-content: center;
   padding: 0;
+  /* line-height: normal resolves differently per glyph, so the line box — and
+     with it the mark — sat off-centre for anything that wasn't the original
+     checkmark. Pinning it to 1 makes the box exactly the glyph's height, so
+     flex centring has something predictable to centre. */
+  line-height: 1;
+  font-size: 12px;
+  /* The marks are text glyphs, not emoji; keeping them on one known family
+     stops each style from inheriting whatever the equipped Font reward is and
+     shifting its metrics with it. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", "Apple Symbols", sans-serif;
+}
+.task-checkbox .mark-glyph {
+  display: block;
+  line-height: 1;
+  /* Optical centring: most of these glyphs carry more ink above the baseline
+     than below, which leaves them sitting high in a geometrically centred
+     box. A half-pixel down reads as centred to the eye. */
+  transform: translateY(0.5px);
 }
 .task-item.completed .task-checkbox { background: var(--accent); }
 .task-text { flex: 1; font-size: 14px; }
