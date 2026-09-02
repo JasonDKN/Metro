@@ -447,14 +447,26 @@ class Store {
     if (bp.tiersCustomized) return;
 
     const current = [...bp.tiers].sort((a, b) => a.tier - b.tier);
-    if (current.length === seasonal.length) return;
+    const sameAs = (other: Tier[]) =>
+      current.length === other.length &&
+      current.every((t, i) => t.tier === other[i].tier && t.pointsRequired === other[i].pointsRequired);
+    if (sameAs(seasonal)) return; // already this season's ladder
 
-    const shorter = current.length < seasonal.length ? current : seasonal;
-    const longer = current.length < seasonal.length ? seasonal : current;
-    const isPrefix = shorter.every(
-      (t, i) => longer[i] && t.tier === longer[i].tier && t.pointsRequired === longer[i].pointsRequired
-    );
-    if (!isPrefix) return;
+    // Only adopt the season's ladder over one we can RECOGNISE as not
+    // hand-made: another season's, the evergreen default, or a truncated
+    // prefix of this season's (a save that predates the ladder growing).
+    //
+    // Comparing lengths alone used to stand in for this, and it silently
+    // failed the moment two seasons had the same number of tiers: rolling
+    // from August's 30-tier ladder into September's 30-tier ladder looked
+    // like a match and left the player climbing the wrong point curve, with
+    // September's rewards priced at August's thresholds.
+    const isPrefixOfSeasonal =
+      current.length < seasonal.length &&
+      current.every((t, i) => t.tier === seasonal[i].tier && t.pointsRequired === seasonal[i].pointsRequired);
+    const isAKnownLadder =
+      isPrefixOfSeasonal || sameAs(DEFAULT_TIERS) || Object.values(SEASONAL_TIERS).some((ladder) => sameAs(ladder));
+    if (!isAKnownLadder) return; // hand-made and unflagged — leave it alone
 
     bp.tiers = seasonal.map((t) => ({ ...t }));
 
@@ -1878,12 +1890,28 @@ class Store {
     dg.minPoints = DAILY_GAME_MIN_POINTS;
     dg.maxPoints = DAILY_GAME_MAX_POINTS;
 
+    this.rescoreDailyGameEntries(() => true);
+  }
+
+  /** Recomputes `pointsAwarded` for every logged entry the predicate accepts,
+   * and moves the season and lifetime totals by the difference.
+   *
+   * The split is the fiddly part and the reason this is shared rather than
+   * written twice: `entries` spans every month, but `seasonPoints` only
+   * covers the current one. So the delta from entries dated inside the
+   * current season goes through awardPoints — crediting both totals, and
+   * granting any tier the extra points now reach — while everything older
+   * adjusts lifetimePoints alone. Crediting the whole delta to the season
+   * would hand this month points earned in a previous one. */
+  private rescoreDailyGameEntries(matches: (entry: DailyGameEntry) => boolean): void {
+    const dg = this.state.dailyGames;
     const configById = new Map(dg.configs.map((c) => [c.id, c]));
     const bp = this.state.battlepass;
     let seasonDelta = 0;
     let lifetimeDelta = 0;
 
     for (const entry of dg.entries) {
+      if (!matches(entry)) continue;
       const config = configById.get(entry.gameId);
       if (!config) continue; // no config to rescore against; leave it alone
       const before = entry.pointsAwarded;
@@ -1901,6 +1929,36 @@ class Store {
     }
     if (seasonDelta > 0) this.awardPoints(seasonDelta, [], []);
     else if (seasonDelta < 0) this.revokePoints(-seasonDelta);
+  }
+
+  /** Changes what a puzzle's scores are worth — the minimum and maximum it's
+   * anchored to, and which direction is better.
+   *
+   * `rescoreHistory` decides what happens to days already logged against the
+   * old rule. Rescoring is right when the rule was simply wrong (a mistyped
+   * maximum means every past score was measured against the wrong ceiling);
+   * leaving history alone is right when the puzzle itself changed and old
+   * results were fairly earned under the old rule. Neither is safe to assume,
+   * so the caller asks.
+   *
+   * Returns the number of entries rescored, or null if the puzzle is gone. */
+  updateDailyGameScoring(gameId: string, scoring: DailyGameScoring, opts: { rescoreHistory: boolean }): number | null {
+    const config = this.state.dailyGames.configs.find((c) => c.id === gameId);
+    if (!config) return null;
+    config.scoring = scoring;
+
+    let rescored = 0;
+    if (opts.rescoreHistory) {
+      const before = new Map(
+        this.state.dailyGames.entries.filter((e) => e.gameId === gameId).map((e) => [e, e.pointsAwarded])
+      );
+      this.rescoreDailyGameEntries((e) => e.gameId === gameId);
+      for (const [entry, points] of before) {
+        if (entry.pointsAwarded !== points) rescored++;
+      }
+    }
+    this.emit();
+    return rescored;
   }
 
   /** Adds a user-defined puzzle to the Daily Puzzles list. Returns null (and

@@ -900,6 +900,19 @@ details.manage-recurring summary:hover { color: var(--text); }
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   text-decoration: none;
 }
+/* The inline scoring editor. It's a child of the row so drag-reorder keeps
+   working, hence flex-basis:100% to force it onto its own line underneath. */
+.puzzle-edit-host { flex: 0 0 100%; }
+.puzzle-edit-host:empty { display: none; }
+.puzzle-manage-row.editing { border-color: var(--accent); }
+.puzzle-edit-panel {
+  margin-top: 10px; padding: 12px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.puzzle-edit-panel .inline-form { margin: 0; }
+.puzzle-edit-panel .puzzle-scoring-preview { margin-top: 10px; }
+
 .puzzle-manage-row.dragging { opacity: 0.35; }
 .puzzle-manage-row.drag-over-top { border-top-color: var(--accent); }
 .puzzle-manage-row.drag-over-bottom { border-bottom-color: var(--accent); }

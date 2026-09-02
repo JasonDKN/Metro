@@ -289,6 +289,35 @@ export function buildDailyGameScoring(draft: DailyGameDraft): BuildScoringResult
   return { ok: true, scoring: { method: "linearRange", worst: minValue, best: maxValue, unit: "score" } };
 }
 
+/** The reverse of buildDailyGameScoring: recovers the min/max/fail answers a
+ * stored rule was built from, so the edit form opens showing the numbers you
+ * originally typed rather than a blank slate. Note that minValue/maxValue are
+ * the literal numeric bounds — direction lives in `kind`, so a lower-is-better
+ * rule still reports its smaller number as the minimum.
+ *
+ * Returns null for "underParDailyBest", which is scored against the day's best
+ * result rather than a fixed range and so has no bounds to show; the edit
+ * panel treats that as "pick a rule to convert this to" instead. */
+export function draftFromScoring(scoring: DailyGameScoring): DailyGameDraft | null {
+  if (scoring.method === "guessCount") {
+    return {
+      kind: "fewerGuesses",
+      minValue: scoring.bestGuesses,
+      maxValue: scoring.worstGuesses,
+      failPoints: scoring.failPoints,
+    };
+  }
+  if (scoring.method === "linearRange") {
+    const lowerIsBetter = scoring.best < scoring.worst;
+    return {
+      kind: scoring.unit === "seconds" ? "fasterTime" : lowerIsBetter ? "lowerScore" : "higherScore",
+      minValue: Math.min(scoring.worst, scoring.best),
+      maxValue: Math.max(scoring.worst, scoring.best),
+    };
+  }
+  return null;
+}
+
 /** A one-line plain-English summary of how a puzzle converts scores into
  * points, for the manage list — so the rule a puzzle was set up with stays
  * visible instead of being buried in whatever the add form said at the time. */
