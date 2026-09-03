@@ -8,6 +8,7 @@ import { store } from "../data/store.js";
 import { el } from "./dom.js";
 import { BUILT_IN_AVATARS, FONT_STACKS } from "../data/defaults.js";
 import { openImageLightbox } from "./lightbox.js";
+import { checkboxMark } from "./checkMarks.js";
 
 /** Accent-color pairs mirroring each built-in theme's CSS custom properties
  * (see body[data-theme="..."] in styles.css) — used to render a small
@@ -104,18 +105,22 @@ export function rewardVisual(categoryId: string, itemId: string, description?: s
     const pattern = store.getState().battlepass.categories.find((c) => c.id === "cat-backgrounds")?.items.find((i) => i.id === itemId)?.backgroundPattern;
     return el("span", { class: `reward-icon bg-swatch${pattern ? ` ${pattern}` : ""}` });
   }
+  // Checkbox rewards preview with the same drawn mark the checkbox itself
+  // uses, so the Inventory tile and the ticked box can't show different
+  // shapes for the same reward.
+  if (categoryId === "cat-checkboxes") {
+    return el("span", { class: "reward-icon checkbox-swatch" }, [checkboxMark(itemId, description ?? "✓", 15)]);
+  }
   const icon =
     categoryId === "cat-avatars"
       ? description || "🧑"
       : categoryId === "cat-stickers"
         ? description || "⭐"
-        : categoryId === "cat-checkboxes"
-          ? description || "✓"
-          : categoryId === "cat-titles"
-            ? "🎖️"
-            : categoryId === "cat-effects"
-              ? "✨"
-              : "🎁";
+        : categoryId === "cat-titles"
+          ? "🎖️"
+          : categoryId === "cat-effects"
+            ? "✨"
+            : "🎁";
   return el("span", { class: "reward-icon" }, [icon]);
 }
 

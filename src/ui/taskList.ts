@@ -16,6 +16,7 @@ import type { Checklist, Difficulty, Task } from "../types.js";
 import { store } from "../data/store.js";
 import { el, clear } from "./dom.js";
 import { enableDragReorder } from "./dragList.js";
+import { checkboxMark } from "./checkMarks.js";
 import { DIFFICULTY_LABELS } from "../types.js";
 import { announceRewards, celebrate, showToast } from "./toast.js";
 import {
@@ -68,12 +69,13 @@ export function weekdayPicker(selected: number[] = ALL_WEEKDAYS): { wrap: HTMLEl
  * stickers use for their emoji), so a user-created style needs nothing beyond
  * picking a character. Falls back to Metro's original checkmark whenever
  * nothing is equipped or the equipped item has since been deleted. */
-function completedMark(): string {
+function completedMark(): HTMLElement {
   const s = store.getState();
   const id = s.settings.activeCheckboxId;
-  if (!id) return "✓";
-  const item = s.battlepass.categories.find((c) => c.id === "cat-checkboxes")?.items.find((i) => i.id === id);
-  return item?.description || "✓";
+  const item = id
+    ? s.battlepass.categories.find((c) => c.id === "cat-checkboxes")?.items.find((i) => i.id === id)
+    : undefined;
+  return checkboxMark(id, item?.description ?? "✓");
 }
 
 export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions = {}): HTMLElement {
@@ -202,7 +204,7 @@ export function renderChecklistCard(checklist: Checklist, opts: TaskListOptions 
             paint();
           },
         },
-        [task.completed ? el("span", { class: "mark-glyph" }, [completedMark()]) : null]
+        [task.completed ? completedMark() : null]
       );
       row.appendChild(checkbox);
     }

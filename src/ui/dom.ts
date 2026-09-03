@@ -30,6 +30,25 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** The SVG twin of `el`. SVG nodes live in their own namespace, so
+ * document.createElement builds an inert HTMLUnknownElement that renders as
+ * nothing — hence the separate helper rather than a flag on `el`. */
+export function svgEl(
+  tag: string,
+  attrs: Record<string, string> = {},
+  children: (Node | null | undefined)[] = []
+): SVGElement {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.setAttribute("class", value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) {
+    if (child) node.appendChild(child);
+  }
+  return node;
+}
+
 export function clear(node: Element): void {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
